@@ -4,8 +4,8 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
   moduleFormat = "esm"
 }
 
@@ -14,17 +14,187 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
-  posts Post[]
+  id             String    @id
+  wallet_address String    @unique
+  username       String    @unique
+  email          String    @unique
+  location       String
+  institution    String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  skill             Skill?
+  skill_description SkillDescription?
+  social_media      SocialMedia?
+  organizations     Organization[]
+  teams             Team[]
+  team_roles        TeamRole[]
+
+  @@map("users")
 }
 
-model Post {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String?
-  published Boolean? @default(false)
-  author    User?    @relation(fields: [authorId], references: [id])
-  authorId  Int?
+model Skill {
+  id         String    @id
+  user_id    String    @unique
+  skill_name String    @unique
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("skills")
+}
+
+model SkillDescription {
+  id          String    @id
+  description String
+  user_id     String    @unique
+  created_at  DateTime  @default(now())
+  updated_at  DateTime? @updatedAt
+  deleted_at  Int?
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("skill_description")
+}
+
+model SocialMedia {
+  id            String    @id
+  github_link   String
+  linkedin_link String
+  user_id       String    @unique
+  created_at    DateTime  @default(now())
+  updated_at    DateTime? @updatedAt
+  deleted_at    Int?
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("social_media")
+}
+
+model Organization {
+  id          String    @id
+  avatar_url  String    @unique
+  name        String    @unique
+  description String    @unique
+  user_id     String
+  created_at  DateTime  @default(now())
+  updated_at  DateTime? @updatedAt
+  deleted_at  DateTime?
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("organization")
+}
+
+model Competition {
+  id                      String    @id
+  name                    String
+  category                String
+  description             String
+  requirement             String
+  registration_window     DateTime
+  competition_window      DateTime
+  submission_deadline     DateTime
+  judging_review          DateTime
+  result_announcement     DateTime
+  pirze_certificate_claim DateTime
+  certificate_cid         String
+  guidebook_cid           String
+  created_at              DateTime  @default(now())
+  updated_at              DateTime? @updatedAt
+  deleted_at              DateTime?
+
+  prize_winners PrizeWinner[]
+  teams         Team[]
+
+  @@map("competition")
+}
+
+model PrizeWinner {
+  id              String    @id
+  category        String
+  amount          Int
+  certificate_cid String
+  competition_id  String
+  created_at      DateTime  @default(now())
+  updated_at      DateTime? @updatedAt
+  deleted_at      DateTime?
+
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("prize_winner")
+}
+
+model Team {
+  id             String    @id
+  name           String
+  visibility     Boolean
+  description    String
+  competition_id String
+  user_id        String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  competition        Competition        @relation(fields: [competition_id], references: [id])
+  user               User               @relation(fields: [user_id], references: [id])
+  skills_suggestions SkillsSuggestion[]
+  team_codes         TeamCode[]
+  team_roles         TeamRole[]
+
+  @@map("team")
+}
+
+model SkillsSuggestion {
+  id         String    @id
+  name       String
+  team_id    String
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
+
+  team Team @relation(fields: [team_id], references: [id])
+
+  @@map("skills_suggestion")
+}
+
+model TeamCode {
+  id         String    @id
+  code       String
+  team_id    String?
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
+
+  team Team? @relation(fields: [team_id], references: [id])
+
+  @@map("team_code")
+}
+
+model TeamRole {
+  id         String    @id
+  role       String
+  user_id    String
+  team_id    String
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id])
+  team Team @relation(fields: [team_id], references: [id])
+
+  @@map("team_role")
+}
+
+model Winner {
+  id             String    @id
+  wallet_address String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  @@map("winner")
 }
