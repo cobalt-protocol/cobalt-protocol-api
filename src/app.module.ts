@@ -3,7 +3,10 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { HealthModule } from './health/health.module.js';
-import { PrismaService } from './prisma/prisma.service.js';
+import { ProfileModule } from './modules/profile/profile.module.js';
+import { PrismaModule } from './prisma/prisma.module.js';
+import { APP_FILTER } from '@nestjs/core';
+import { ApiExceptionFilter } from './common/api-exception.filter.js';
 
 @Module({
   imports: [
@@ -12,9 +15,14 @@ import { PrismaService } from './prisma/prisma.service.js';
       cache: true,
       expandVariables: true,
     }),
+    PrismaModule,
     HealthModule,
+    ProfileModule,
   ],
   controllers: [AppController],
-  providers: [AppService, PrismaService],
+  providers: [
+    AppService,
+    { provide: APP_FILTER, useClass: ApiExceptionFilter },
+  ],
 })
 export class AppModule {}
