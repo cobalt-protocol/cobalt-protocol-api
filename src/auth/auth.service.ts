@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { verifyMessage } from 'viem';
@@ -25,6 +30,16 @@ export interface VerifySignatureData {
 
 export interface VerifySignatureResponse {
   data: VerifySignatureData;
+  message: string;
+  errors: null;
+}
+
+export interface UserProfileData {
+  user: User;
+}
+
+export interface UserProfileResponse {
+  data: UserProfileData;
   message: string;
   errors: null;
 }
@@ -204,6 +219,55 @@ export class AuthService {
         user: user!,
       },
       message: 'Signature verified successfully',
+      errors: null,
+    };
+  }
+
+  async getMe(authHeader?: string): Promise<UserProfileResponse> {
+    if (!authHeader) {
+      throw new UnauthorizedException('Missing authorization header');
+    }
+
+    const [type, token] = authHeader.split(' ');
+    if (type !== 'Bearer' || !token) {
+      throw new UnauthorizedException('Invalid authorization header format');
+    }
+
+    let payload: any;
+    try {
+      payload = await this.jwtService.verifyAsync(token);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    const userId = payload.sub;
+    const walletAddress = payload.wallet_address;
+
+    let user: User | null = null;
+    try {
+      if (userId) {
+        user = await this.prisma.user.findUnique({
+          where: { id: userId },
+        });
+      }
+      if (!user && walletAddress) {
+        user = await this.prisma.user.findUnique({
+          where: { wallet_address: walletAddress.toLowerCase() },
+        });
+      }
+    } catch (dbError) {
+      this.logger.warn(`Could not query database for user: ${dbError}`);
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return {
+      data: {
+        user,
+      },
+      message: 'User profile retrieved successfully',
       errors: null,
     };
   }

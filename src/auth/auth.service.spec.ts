@@ -29,6 +29,7 @@ describe('AuthService', () => {
 
   const mockJwtService = {
     sign: vi.fn().mockReturnValue('mocked-jwt-access-token'),
+    verifyAsync: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -113,6 +114,43 @@ describe('AuthService', () => {
       expect(result.data.user).toEqual(mockUser);
       expect(result.message).toBe('Nonce generated successfully');
       expect(result.errors).toBeNull();
+    });
+  });
+
+  describe('getMe', () => {
+    it('should throw UnauthorizedException when header is missing', async () => {
+      await expect(service.getMe()).rejects.toThrow('Missing authorization header');
+    });
+
+    it('should throw UnauthorizedException when format is not Bearer', async () => {
+      await expect(service.getMe('Basic token')).rejects.toThrow('Invalid authorization header format');
+    });
+
+    it('should throw UnauthorizedException when token is invalid', async () => {
+      mockJwtService.verifyAsync.mockRejectedValue(new Error('Invalid token'));
+      await expect(service.getMe('Bearer invalid-token')).rejects.toThrow('Invalid or expired token');
+    });
+
+    it('should return user profile when token is valid', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({
+        sub: mockUser.id,
+        wallet_address: mockUser.wallet_address,
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.getMe('Bearer valid-token');
+
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith('valid-token');
+      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+      });
+      expect(result).toEqual({
+        data: {
+          user: mockUser,
+        },
+        message: 'User profile retrieved successfully',
+        errors: null,
+      });
     });
   });
 });

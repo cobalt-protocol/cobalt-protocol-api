@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Post,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service.js';
 import { RequestNonceDto } from './dto/request-nonce.dto.js';
 import { VerifySignatureDto } from './dto/verify-signature.dto.js';
@@ -101,6 +103,50 @@ export class AuthController {
   })
   async verifySignature(@Body() dto: VerifySignatureDto) {
     return this.authService.verifySignature(dto);
+  }
+
+  @Get('@me')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get current user profile using authorization header',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+    schema: {
+      example: {
+        data: {
+          user: {
+            id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
+            wallet_address: '0x742d35cc6634c0532925a3b844bc454e4438f44e',
+            username: null,
+            email: null,
+            location: null,
+            institution: null,
+            created_at: '2026-09-23T00:00:00.000Z',
+            updated_at: null,
+            deleted_at: null,
+          },
+        },
+        message: 'User profile retrieved successfully',
+        errors: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized header or invalid token',
+    schema: {
+      example: {
+        data: null,
+        message: 'Missing authorization header',
+        errors: null,
+      },
+    },
+  })
+  async getMe(@Headers('authorization') authHeader?: string) {
+    return this.authService.getMe(authHeader);
   }
 }
 

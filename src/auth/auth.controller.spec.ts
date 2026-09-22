@@ -22,6 +22,13 @@ describe('AuthController', () => {
       message: 'Signature verified successfully',
       errors: null,
     }),
+    getMe: vi.fn().mockResolvedValue({
+      data: {
+        user: { id: '1', wallet_address: '0x123' },
+      },
+      message: 'User profile retrieved successfully',
+      errors: null,
+    }),
   };
 
   beforeEach(async () => {
@@ -50,6 +57,14 @@ describe('AuthController', () => {
     const res = await controller.verifySignature(dto);
     expect(mockAuthService.verifySignature).toHaveBeenCalledWith(dto);
     expect(res.data.token).toBe('mock-token');
+    expect(res.errors).toBeNull();
+  });
+
+  it('should call getMe', async () => {
+    const header = 'Bearer mock-token';
+    const res = await controller.getMe(header);
+    expect(mockAuthService.getMe).toHaveBeenCalledWith(header);
+    expect(res.data.user.id).toBe('1');
     expect(res.errors).toBeNull();
   });
 });

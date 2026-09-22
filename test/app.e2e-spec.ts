@@ -84,6 +84,18 @@ describe('AppController (e2e)', () => {
         ]),
       });
     });
+
+    it('GET /auth/@me - missing header returns 401', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/auth/@me')
+        .expect(401);
+
+      expect(response.body).toMatchObject({
+        data: null,
+        message: 'Missing authorization header',
+        errors: null,
+      });
+    });
   });
 
   afterEach(async () => {
