@@ -14,17 +14,18 @@ datasource db {
 }
 
 model User {
-  id             String    @id
+  id             String    @id @default(uuid())
   wallet_address String    @unique
-  username       String    @unique
-  email          String    @unique
-  location       String
-  institution    String
+  username       String?   @unique
+  email          String?   @unique
+  location       String?
+  institution    String?
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
-  skill             Skill?
+  skills            Skill[]
+  auth_sessions     AuthSession[]
   skill_description SkillDescription?
   social_media      SocialMedia?
   organizations     Organization[]
@@ -35,20 +36,43 @@ model User {
 }
 
 model Skill {
-  id         String    @id
-  user_id    String    @unique
-  skill_name String    @unique
+  id         String    @id @default(uuid())
+  user_id    String
+  skill_name String
+  level      SkillLevel @default(INTERMEDIATE)
   created_at DateTime  @default(now())
   updated_at DateTime? @updatedAt
   deleted_at DateTime?
 
   user User @relation(fields: [user_id], references: [id])
 
+  @@unique([user_id, skill_name])
   @@map("skills")
 }
 
+enum SkillLevel {
+  INTERMEDIATE
+  PROFICIENT
+  ADVANCED
+  EXPERT
+}
+
+model AuthSession {
+  id         String    @id @default(uuid())
+  user_id    String
+  token_hash String    @unique
+  expires_at DateTime
+  revoked_at DateTime?
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("auth_sessions")
+}
+
 model SkillDescription {
-  id          String    @id
+  id          String    @id @default(uuid())
   description String
   user_id     String    @unique
   created_at  DateTime  @default(now())
@@ -61,7 +85,7 @@ model SkillDescription {
 }
 
 model SocialMedia {
-  id            String    @id
+  id            String    @id @default(uuid())
   github_link   String
   linkedin_link String
   user_id       String    @unique
@@ -75,7 +99,7 @@ model SocialMedia {
 }
 
 model Organization {
-  id          String    @id
+  id          String    @id @default(uuid())
   avatar_url  String    @unique
   name        String    @unique
   description String    @unique
@@ -90,7 +114,7 @@ model Organization {
 }
 
 model Competition {
-  id                      String    @id
+  id                      String    @id @default(uuid())
   name                    String
   category                String
   description             String
@@ -114,7 +138,7 @@ model Competition {
 }
 
 model PrizeWinner {
-  id              String    @id
+  id              String    @id @default(uuid())
   category        String
   amount          Int
   certificate_cid String
@@ -129,7 +153,7 @@ model PrizeWinner {
 }
 
 model Team {
-  id             String    @id
+  id             String    @id @default(uuid())
   name           String
   visibility     Boolean
   description    String
@@ -149,7 +173,7 @@ model Team {
 }
 
 model SkillsSuggestion {
-  id         String    @id
+  id         String    @id @default(uuid())
   name       String
   team_id    String
   created_at DateTime  @default(now())
@@ -162,7 +186,7 @@ model SkillsSuggestion {
 }
 
 model TeamCode {
-  id         String    @id
+  id         String    @id @default(uuid())
   code       String
   team_id    String?
   created_at DateTime  @default(now())
@@ -175,7 +199,7 @@ model TeamCode {
 }
 
 model TeamRole {
-  id         String    @id
+  id         String    @id @default(uuid())
   role       String
   user_id    String
   team_id    String
@@ -190,7 +214,7 @@ model TeamRole {
 }
 
 model Winner {
-  id             String    @id
+  id             String    @id @default(uuid())
   wallet_address String
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
