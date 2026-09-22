@@ -17,14 +17,14 @@ describe('AuthController', () => {
     verifySignature: vi.fn().mockResolvedValue({
       data: {
         token: 'mock-token',
-        user: { id: '1', wallet_address: '0x123' },
+        user: { id: '1', wallet_address: '0x123', role: 'user' },
       },
       message: 'Signature verified successfully',
       errors: null,
     }),
     getMe: vi.fn().mockResolvedValue({
       data: {
-        user: { id: '1', wallet_address: '0x123' },
+        user: { id: '1', wallet_address: '0x123', role: 'user' },
       },
       message: 'User profile retrieved successfully',
       errors: null,
@@ -68,6 +68,3 @@ describe('AuthController', () => {
     expect(res.errors).toBeNull();
   });
 });
-
-
-

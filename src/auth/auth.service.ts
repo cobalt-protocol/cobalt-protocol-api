@@ -5,12 +5,19 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { verifyMessage } from 'viem';
 import { User } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { generateUlid } from '../common/utils/ulid.util.js';
 import { RequestNonceDto } from './dto/request-nonce.dto.js';
 import { VerifySignatureDto } from './dto/verify-signature.dto.js';
+
+export type UserRole = 'organization' | 'user';
+
+export type UserWithRole = User & {
+  role: UserRole;
+};
 
 export interface NonceData {
   nonce: string;
@@ -25,7 +32,7 @@ export interface NonceResponse {
 
 export interface VerifySignatureData {
   token: string;
-  user: User;
+  user: UserWithRole;
 }
 
 export interface VerifySignatureResponse {
@@ -35,7 +42,7 @@ export interface VerifySignatureResponse {
 }
 
 export interface UserProfileData {
-  user: User;
+  user: UserWithRole;
 }
 
 export interface UserProfileResponse {
@@ -53,6 +60,21 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  private async getUserRole(userId: string): Promise<UserRole> {
+    try {
+      const org = await this.prisma.organization.findFirst({
+        where: { user_id: userId },
+        select: { id: true },
+      });
+      return org ? 'organization' : 'user';
+    } catch (dbError) {
+      this.logger.warn(
+        `Could not query database for organization relation: ${dbError}`,
+      );
+      return 'user';
+    }
+  }
+
   async generateNonce(dto?: RequestNonceDto): Promise<NonceResponse> {
     const nonce = randomBytes(16).toString('hex');
     const walletAddress = dto?.walletAddress
@@ -63,23 +85,19 @@ export class AuthService {
 
     if (walletAddress) {
       try {
-        user = await this.prisma.user.findUnique({
+        user = await this.prisma.user.upsert({
           where: { wallet_address: walletAddress },
+          create: {
+            id: generateUlid(),
+            wallet_address: walletAddress,
+          },
+          update: {},
         });
-
-        if (!user) {
-          user = await this.prisma.user.create({
-            data: {
-              id: randomUUID(),
-              wallet_address: walletAddress,
-            },
-          });
-        }
 
         await this.prisma.nonceConnect.upsert({
           where: { user_id: user.id },
           create: {
-            id: randomUUID(),
+            id: generateUlid(),
             nonce,
             user_id: user.id,
           },
@@ -90,7 +108,7 @@ export class AuthService {
       } catch (dbError) {
         this.logger.warn(`Could not persist nonce to database: ${dbError}`);
         user = {
-          id: randomUUID(),
+          id: generateUlid(),
           wallet_address: walletAddress,
           username: null,
           email: null,
@@ -129,9 +147,7 @@ export class AuthService {
         storedNonce = user.nonce_connect.nonce;
       }
     } catch (dbError) {
-      this.logger.warn(
-        `Could not query database for stored nonce: ${dbError}`,
-      );
+      this.logger.warn(`Could not query database for stored nonce: ${dbError}`);
     }
 
     if (!messageToVerify) {
@@ -176,17 +192,14 @@ export class AuthService {
 
     let user: User | null = null;
     try {
-      user = await this.prisma.user.findUnique({
+      user = await this.prisma.user.upsert({
         where: { wallet_address: walletAddress },
+        create: {
+          id: generateUlid(),
+          wallet_address: walletAddress,
+        },
+        update: {},
       });
-      if (!user) {
-        user = await this.prisma.user.create({
-          data: {
-            id: randomUUID(),
-            wallet_address: walletAddress,
-          },
-        });
-      }
       await this.prisma.nonceConnect.deleteMany({
         where: { user_id: user.id },
       });
@@ -195,7 +208,7 @@ export class AuthService {
         `Could not sync user or clear nonce from database: ${dbError}`,
       );
       user = {
-        id: randomUUID(),
+        id: generateUlid(),
         wallet_address: walletAddress,
         username: null,
         email: null,
@@ -207,8 +220,10 @@ export class AuthService {
       };
     }
 
+    const role = await this.getUserRole(user.id);
+
     const payload = {
-      sub: user?.id || randomUUID(),
+      sub: user.id,
       wallet_address: walletAddress,
     };
     const token = this.jwtService.sign(payload);
@@ -216,7 +231,10 @@ export class AuthService {
     return {
       data: {
         token,
-        user: user!,
+        user: {
+          ...user,
+          role,
+        },
       },
       message: 'Signature verified successfully',
       errors: null,
@@ -263,19 +281,17 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const role = await this.getUserRole(user.id);
+
     return {
       data: {
-        user,
+        user: {
+          ...user,
+          role,
+        },
       },
       message: 'User profile retrieved successfully',
       errors: null,
     };
   }
 }
-
-
-
-
-
-
-

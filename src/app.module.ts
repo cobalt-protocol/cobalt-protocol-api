@@ -4,6 +4,7 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
+import { CompetitionModule } from './competition/competition.module.js';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js';
 import { HealthModule } from './health/health.module.js';
@@ -18,6 +19,7 @@ import { PrismaService } from './prisma/prisma.service.js';
     }),
     HealthModule,
     AuthModule,
+    CompetitionModule,
   ],
   controllers: [AppController],
   providers: [
@@ -34,5 +36,3 @@ import { PrismaService } from './prisma/prisma.service.js';
   ],
 })
 export class AppModule {}
-
-

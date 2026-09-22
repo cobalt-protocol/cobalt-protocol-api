@@ -25,14 +25,11 @@ describe('AppController (e2e)', () => {
   });
 
   it('/api/v1 (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/api/v1')
-      .expect(200)
-      .expect({
-        data: 'Hello World!',
-        message: 'Success',
-        errors: null,
-      });
+    return request(app.getHttpServer()).get('/api/v1').expect(200).expect({
+      data: 'Hello World!',
+      message: 'Success',
+      errors: null,
+    });
   });
 
   it('/api/v1/health (GET)', async () => {
@@ -102,4 +99,3 @@ describe('AppController (e2e)', () => {
     await app.close();
   });
 });
-

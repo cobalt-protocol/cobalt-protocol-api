@@ -7,7 +7,12 @@ import {
   HttpStatus,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service.js';
 import { RequestNonceDto } from './dto/request-nonce.dto.js';
 import { VerifySignatureDto } from './dto/verify-signature.dto.js';
@@ -80,6 +85,7 @@ export class AuthController {
             email: null,
             location: null,
             institution: null,
+            role: 'user',
             created_at: '2026-09-23T00:00:00.000Z',
             updated_at: null,
             deleted_at: null,
@@ -124,6 +130,7 @@ export class AuthController {
             email: null,
             location: null,
             institution: null,
+            role: 'user',
             created_at: '2026-09-23T00:00:00.000Z',
             updated_at: null,
             deleted_at: null,
@@ -149,10 +156,3 @@ export class AuthController {
     return this.authService.getMe(authHeader);
   }
 }
-
-
-
-
-
-
-

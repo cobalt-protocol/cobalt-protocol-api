@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEthereumAddress, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsEthereumAddress,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class VerifySignatureDto {
   @ApiProperty({
@@ -11,7 +16,8 @@ export class VerifySignatureDto {
   walletAddress!: string;
 
   @ApiProperty({
-    description: 'Cryptographic signature produced by signing the nonce message with wallet',
+    description:
+      'Cryptographic signature produced by signing the nonce message with wallet',
     example: '0x...',
   })
   @IsNotEmpty()
