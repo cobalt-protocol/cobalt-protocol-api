@@ -28,7 +28,8 @@
     "prisma:migrate:reset": "prisma migrate reset",
     "prisma:studio": "prisma studio",
     "prisma:validate": "prisma validate",
-    "prisma:format": "prisma format"
+    "prisma:format": "prisma format",
+    "prisma:seed": "prisma db seed"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -46,7 +47,8 @@
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
