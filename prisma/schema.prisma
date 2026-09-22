@@ -16,20 +16,24 @@ datasource db {
 model User {
   id             String    @id
   wallet_address String    @unique
-  username       String    @unique
-  email          String    @unique
-  location       String
-  institution    String
+  username       String?   @unique
+  email          String?   @unique
+  location       String?
+  institution    String?
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
-  skill             Skill?
-  skill_description SkillDescription?
-  social_media      SocialMedia?
-  organizations     Organization[]
-  teams             Team[]
-  team_roles        TeamRole[]
+  skill                          Skill?
+  skill_description              SkillDescription?
+  social_media                   SocialMedia?
+  organizations                  Organization[]
+  teams                          Team[]
+  team_roles                     TeamRole[]
+  winner                         Winner?
+  nonce_connect                  NonceConnect?
+  nonce_certificate_participants NonceCertificateParticipant[]
+  nonce_certificate_winners      NonceCertificateWinner[]
 
   @@map("users")
 }
@@ -76,9 +80,10 @@ model SocialMedia {
 
 model Organization {
   id          String    @id
-  avatar_url  String    @unique
-  name        String    @unique
-  description String    @unique
+  tx_hash     String    @unique
+  avatar_url  String?   @unique
+  name        String?   @unique
+  description String?   @unique
   user_id     String
   created_at  DateTime  @default(now())
   updated_at  DateTime? @updatedAt
@@ -91,6 +96,7 @@ model Organization {
 
 model Competition {
   id                      String    @id
+  tx_hash                 String    @unique
   name                    String
   category                String
   description             String
@@ -107,8 +113,10 @@ model Competition {
   updated_at              DateTime? @updatedAt
   deleted_at              DateTime?
 
-  prize_winners PrizeWinner[]
-  teams         Team[]
+  prize_winners                  PrizeWinner[]
+  teams                          Team[]
+  nonce_certificate_participants NonceCertificateParticipant[]
+  nonce_certificate_winners      NonceCertificateWinner[]
 
   @@map("competition")
 }
@@ -124,6 +132,7 @@ model PrizeWinner {
   deleted_at      DateTime?
 
   competition Competition @relation(fields: [competition_id], references: [id])
+  winner      Winner?
 
   @@map("prize_winner")
 }
@@ -190,11 +199,59 @@ model TeamRole {
 }
 
 model Winner {
+  id              String    @id
+  wallet_address  String
+  user_id         String    @unique
+  prize_winner_id String    @unique
+  created_at      DateTime  @default(now())
+  updated_at      DateTime? @updatedAt
+  deleted_at      DateTime?
+
+  user         User        @relation(fields: [user_id], references: [id])
+  prize_winner PrizeWinner @relation(fields: [prize_winner_id], references: [id])
+
+  @@map("winner")
+}
+
+model NonceConnect {
+  id         String    @id
+  nonce      String    @unique
+  user_id    String    @unique
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("nonce_connect")
+}
+
+model NonceCertificateParticipant {
   id             String    @id
-  wallet_address String
+  nonce          String    @unique
+  user_id        String
+  competition_id String
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
-  @@map("winner")
+  user        User        @relation(fields: [user_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("nonce_certificate_participant")
+}
+
+model NonceCertificateWinner {
+  id             String    @id
+  nonce          String    @unique
+  user_id        String
+  competition_id String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  user        User        @relation(fields: [user_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("nonce_certificate_winner")
 }
