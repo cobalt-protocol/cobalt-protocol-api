@@ -31,6 +31,7 @@ model User {
   organizations     Organization[]
   teams             Team[]
   team_roles        TeamRole[]
+  join_requests     TeamJoinRequest[]
 
   @@map("users")
 }
@@ -115,6 +116,9 @@ model Organization {
 
 model Competition {
   id                      String    @id @default(uuid())
+  slug                    String?   @unique
+  max_team_size           Int       @default(5)
+  publication_status      String    @default("DRAFT")
   name                    String
   category                String
   description             String
@@ -133,6 +137,8 @@ model Competition {
 
   prize_winners PrizeWinner[]
   teams         Team[]
+  team_roles    TeamRole[]
+  join_requests TeamJoinRequest[]
 
   @@map("competition")
 }
@@ -168,6 +174,7 @@ model Team {
   skills_suggestions SkillsSuggestion[]
   team_codes         TeamCode[]
   team_roles         TeamRole[]
+  join_requests      TeamJoinRequest[]
 
   @@map("team")
 }
@@ -203,14 +210,37 @@ model TeamRole {
   role       String
   user_id    String
   team_id    String
+  competition_id String
   created_at DateTime  @default(now())
   updated_at DateTime? @updatedAt
   deleted_at DateTime?
 
   user User @relation(fields: [user_id], references: [id])
   team Team @relation(fields: [team_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@unique([user_id, competition_id])
+  @@unique([user_id, team_id])
 
   @@map("team_role")
+}
+
+model TeamJoinRequest {
+  id             String   @id @default(uuid())
+  user_id        String
+  team_id        String
+  competition_id String
+  status         String   @default("PENDING")
+  created_at     DateTime @default(now())
+  updated_at     DateTime? @updatedAt
+
+  user User @relation(fields: [user_id], references: [id])
+  team Team @relation(fields: [team_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@unique([competition_id, user_id])
+  @@index([team_id, status])
+  @@map("team_join_requests")
 }
 
 model Winner {
