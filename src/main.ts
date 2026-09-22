@@ -48,7 +48,7 @@ async function bootstrap() {
     });
   }
 
-  const port = Number(configService.get<string>('PORT', '3000'));
+  const port = Number(configService.get<string>('PORT', '3001'));
   await app.listen(port);
 
   const logger = new Logger('Bootstrap');

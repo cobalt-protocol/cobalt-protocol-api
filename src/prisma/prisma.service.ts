@@ -15,20 +15,32 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
+    const connectionString =
+      process.env.DATABASE_URL ||
+      'postgresql://postgres:postgres@localhost:5432/cobalt_db';
+
     const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL as string,
+      connectionString,
     });
 
     super({ adapter });
   }
 
   async onModuleInit() {
-    await this.$connect();
-    this.logger.log('Database connected');
+    try {
+      await this.$connect();
+      this.logger.log('Database connected');
+    } catch (error) {
+      this.logger.warn(`Database connection initialization warning: ${error}`);
+    }
   }
 
   async onModuleDestroy() {
-    await this.$disconnect();
-    this.logger.log('Database disconnected');
+    try {
+      await this.$disconnect();
+      this.logger.log('Database disconnected');
+    } catch {
+      // ignore
+    }
   }
 }
