@@ -14,7 +14,7 @@ datasource db {
 }
 
 model User {
-  id             String    @id @default(uuid())
+  id             String    @id @default(ulid())
   wallet_address String    @unique
   username       String?   @unique
   email          String?   @unique
@@ -24,23 +24,25 @@ model User {
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
-  skills            Skill[]
-  auth_sessions     AuthSession[]
-  skill_description SkillDescription?
-  social_media      SocialMedia?
-  organizations     Organization[]
-  teams             Team[]
-  team_roles        TeamRole[]
-  join_requests     TeamJoinRequest[]
+  skill                          Skill?
+  skill_description              SkillDescription?
+  social_media                   SocialMedia?
+  organizations                  Organization[]
+  teams                          Team[]
+  team_roles                     TeamRole[]
+  winner                         Winner?
+  nonce_connect                  NonceConnect?
+  nonce_certificate_participants NonceCertificateParticipant[]
+  nonce_certificate_winners      NonceCertificateWinner[]
+  competitions                   Competition[]
 
   @@map("users")
 }
 
 model Skill {
-  id         String    @id @default(uuid())
-  user_id    String
-  skill_name String
-  level      SkillLevel @default(INTERMEDIATE)
+  id         String    @id @default(ulid())
+  user_id    String    @unique
+  skill_name String    @unique
   created_at DateTime  @default(now())
   updated_at DateTime? @updatedAt
   deleted_at DateTime?
@@ -73,12 +75,12 @@ model AuthSession {
 }
 
 model SkillDescription {
-  id          String    @id @default(uuid())
+  id          String    @id @default(ulid())
   description String
   user_id     String    @unique
   created_at  DateTime  @default(now())
   updated_at  DateTime? @updatedAt
-  deleted_at  Int?
+  deleted_at  DateTime?
 
   user User @relation(fields: [user_id], references: [id])
 
@@ -86,13 +88,13 @@ model SkillDescription {
 }
 
 model SocialMedia {
-  id            String    @id @default(uuid())
+  id            String    @id @default(ulid())
   github_link   String
   linkedin_link String
   user_id       String    @unique
   created_at    DateTime  @default(now())
   updated_at    DateTime? @updatedAt
-  deleted_at    Int?
+  deleted_at    DateTime?
 
   user User @relation(fields: [user_id], references: [id])
 
@@ -100,10 +102,11 @@ model SocialMedia {
 }
 
 model Organization {
-  id          String    @id @default(uuid())
-  avatar_url  String    @unique
-  name        String    @unique
-  description String    @unique
+  id          String    @id @default(ulid())
+  tx_hash     String    @unique
+  avatar_url  String?   @unique
+  name        String?   @unique
+  description String?   @unique
   user_id     String
   created_at  DateTime  @default(now())
   updated_at  DateTime? @updatedAt
@@ -115,10 +118,8 @@ model Organization {
 }
 
 model Competition {
-  id                      String    @id @default(uuid())
-  slug                    String?   @unique
-  max_team_size           Int       @default(5)
-  publication_status      String    @default("DRAFT")
+  id                      String    @id @default(ulid())
+  tx_hash                 String    @unique
   name                    String
   category                String
   description             String
@@ -131,22 +132,33 @@ model Competition {
   pirze_certificate_claim DateTime
   certificate_cid         String
   guidebook_cid           String
+  token_address           String
+  user_id                 String?
+  price_competition_id    String?
+  competition_id          String
   created_at              DateTime  @default(now())
   updated_at              DateTime? @updatedAt
   deleted_at              DateTime?
 
-  prize_winners PrizeWinner[]
-  teams         Team[]
-  team_roles    TeamRole[]
-  join_requests TeamJoinRequest[]
+  user                           User?                         @relation(fields: [user_id], references: [id])
+  price_competition              PriceCompetition?             @relation(fields: [price_competition_id], references: [id])
+  prize_winners                  PrizeWinner[]
+  teams                          Team[]
+  nonce_certificate_participants NonceCertificateParticipant[]
+  nonce_certificate_winners      NonceCertificateWinner[]
+  prize_deposits                 PrizeDeposited[]
+  competition_fee_paid           CompetitionFeePaid?
+  participant_winners            ParticipantWinner[]
+  prize_distributions            PrizeDistributed[]
 
   @@map("competition")
 }
 
 model PrizeWinner {
-  id              String    @id @default(uuid())
+  id              String    @id @default(ulid())
+  winner_id       BigInt
   category        String
-  amount          Int
+  amount          Decimal
   certificate_cid String
   competition_id  String
   created_at      DateTime  @default(now())
@@ -154,12 +166,13 @@ model PrizeWinner {
   deleted_at      DateTime?
 
   competition Competition @relation(fields: [competition_id], references: [id])
+  winner      Winner?
 
   @@map("prize_winner")
 }
 
 model Team {
-  id             String    @id @default(uuid())
+  id             String    @id @default(ulid())
   name           String
   visibility     Boolean
   description    String
@@ -180,7 +193,7 @@ model Team {
 }
 
 model SkillsSuggestion {
-  id         String    @id @default(uuid())
+  id         String    @id @default(ulid())
   name       String
   team_id    String
   created_at DateTime  @default(now())
@@ -193,7 +206,7 @@ model SkillsSuggestion {
 }
 
 model TeamCode {
-  id         String    @id @default(uuid())
+  id         String    @id @default(ulid())
   code       String
   team_id    String?
   created_at DateTime  @default(now())
@@ -206,7 +219,7 @@ model TeamCode {
 }
 
 model TeamRole {
-  id         String    @id @default(uuid())
+  id         String    @id @default(ulid())
   role       String
   user_id    String
   team_id    String
@@ -244,11 +257,156 @@ model TeamJoinRequest {
 }
 
 model Winner {
-  id             String    @id @default(uuid())
-  wallet_address String
+  id              String    @id @default(ulid())
+  wallet_address  String
+  user_id         String    @unique
+  prize_winner_id String    @unique
+  created_at      DateTime  @default(now())
+  updated_at      DateTime? @updatedAt
+  deleted_at      DateTime?
+
+  user         User        @relation(fields: [user_id], references: [id])
+  prize_winner PrizeWinner @relation(fields: [prize_winner_id], references: [id])
+
+  @@map("winner")
+}
+
+model NonceConnect {
+  id         String    @id @default(ulid())
+  nonce      String    @unique
+  user_id    String    @unique
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("nonce_connect")
+}
+
+model NonceCertificateParticipant {
+  id             String    @id @default(ulid())
+  nonce          String    @unique
+  user_id        String
+  competition_id String
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
-  @@map("winner")
+  user        User        @relation(fields: [user_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("nonce_certificate_participant")
+}
+
+model NonceCertificateWinner {
+  id             String    @id @default(ulid())
+  nonce          String    @unique
+  user_id        String
+  competition_id String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  user        User        @relation(fields: [user_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("nonce_certificate_winner")
+}
+
+model ListingTokenPrize {
+  id                     String    @id @default(ulid())
+  tx_hash                String
+  listing_token_prize_id BigInt
+  token_address          String
+  is_active              Boolean   @default(true)
+  created_at             DateTime  @default(now())
+  updated_at             DateTime? @updatedAt
+  deleted_at             DateTime?
+
+  @@map("listing_token_prize")
+}
+
+model PrizeDeposited {
+  id                String    @id @default(ulid())
+  tx_hash           String
+  treasury_prize_id BigInt
+  competition_id    String
+  token_address     String
+  sender            String
+  amount            Decimal
+  created_at        DateTime  @default(now())
+  updated_at        DateTime? @updatedAt
+  deleted_at        DateTime?
+
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("prize_deposited")
+}
+
+model PriceCompetition {
+  id                       String    @id @default(ulid())
+  tx_hash                  String
+  price_competition_fee_id BigInt    @unique
+  treasury_fee             Decimal
+  token_address            String
+  title                    String
+  description              String
+  created_at               DateTime  @default(now())
+  updated_at               DateTime? @updatedAt
+  deleted_at               DateTime?
+
+  competitions Competition[]
+
+  @@map("price_competition")
+}
+
+model CompetitionFeePaid {
+  id             String    @id @default(ulid())
+  tx_hash        String
+  competition_id String    @unique
+  payer          String
+  token_address  String
+  amount         Decimal
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("competition_fee_paid")
+}
+
+model ParticipantWinner {
+  id                    String    @id @default(ulid())
+  tx_hash               String
+  winner_id             BigInt
+  participant           String
+  participant_winner_id BigInt
+  title                 String
+  competition_id        String
+  created_at            DateTime  @default(now())
+  updated_at            DateTime? @updatedAt
+  deleted_at            DateTime?
+
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("participant_winner")
+}
+
+model PrizeDistributed {
+  id                String    @id @default(ulid())
+  tx_hash           String
+  treasury_prize_id BigInt
+  competition_id    String
+  token_address     String
+  recipient         String
+  amount            Decimal
+  created_at        DateTime  @default(now())
+  updated_at        DateTime? @updatedAt
+  deleted_at        DateTime?
+
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("prize_distributed")
 }
