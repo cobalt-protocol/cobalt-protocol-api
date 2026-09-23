@@ -8,6 +8,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { CreateTeamDto } from './dto/create-team.dto.js';
 import type { TeamQueryDto } from './dto/team-query.dto.js';
+import type { TransferLeadershipDto } from './dto/transfer-leadership.dto.js';
 
 @Injectable()
 export class TeamService {
@@ -100,6 +101,227 @@ export class TeamService {
     });
   }
 
+  async detail(teamId: string, userId?: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+      include: {
+        competition: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            max_team_size: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            wallet_address: true,
+          },
+        },
+        team_roles: {
+          orderBy: { created_at: 'asc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                wallet_address: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!team) throw new NotFoundException('Team not found');
+
+    const isMember = !!userId
+      ? !!(await this.prisma.teamRole.findFirst({
+          where: { team_id: teamId, user_id: userId },
+        }))
+      : false;
+
+    if (!team.visibility && !isMember) {
+      throw new ForbiddenException('Private team access is restricted');
+    }
+
+    const members = team.team_roles.map((member) => ({
+      id: member.user.id,
+      username: member.user.username,
+      walletAddress: member.user.wallet_address,
+      role: member.role.toLowerCase(),
+      joinedAt: member.created_at,
+    }));
+
+    return {
+      data: {
+        id: team.id,
+        name: team.name,
+        description: team.description,
+        visibility: team.visibility ? 'public' : 'private',
+        lead: {
+          id: team.user.id,
+          username: team.user.username,
+          walletAddress: team.user.wallet_address,
+        },
+        members,
+        roles: team.team_roles
+          .map((member) => member.role)
+          .filter((role) => role === 'LEAD' || role === 'MEMBER'),
+        memberCount: team.team_roles.length,
+        maxTeamSize: team.competition.max_team_size,
+        competition: {
+          id: team.competition.id,
+          slug: team.competition.slug,
+          name: team.competition.name,
+        },
+      },
+      message: 'Team retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async members(teamId: string, userId?: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+      select: {
+        id: true,
+        visibility: true,
+      },
+    });
+
+    if (!team) throw new NotFoundException('Team not found');
+
+    const isMember = !!userId
+      ? !!(await this.prisma.teamRole.findFirst({
+          where: { team_id: teamId, user_id: userId },
+        }))
+      : false;
+
+    if (!team.visibility && !isMember) {
+      throw new ForbiddenException('Private team access is restricted');
+    }
+
+    const rows = await this.prisma.teamRole.findMany({
+      where: { team_id: teamId },
+      orderBy: { created_at: 'asc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            wallet_address: true,
+          },
+        },
+      },
+    });
+
+    return {
+      data: rows.map((row) => ({
+        id: row.user.id,
+        username: row.user.username,
+        walletAddress: row.user.wallet_address,
+        role: row.role.toLowerCase(),
+        joinedAt: row.created_at,
+      })),
+      message: 'Team members retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async leaveTeam(teamId: string, userId: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+      select: {
+        id: true,
+        user_id: true,
+        _count: { select: { team_roles: true } },
+      },
+    });
+
+    if (!team) throw new NotFoundException('Team not found');
+    if (team.user_id === userId) {
+      throw new ConflictException(
+        'Transfer leadership before leaving this team',
+      );
+    }
+
+    const membership = await this.prisma.teamRole.findFirst({
+      where: { team_id: teamId, user_id: userId },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Team membership not found');
+    }
+
+    await this.prisma.teamRole.delete({
+      where: { id: membership.id },
+    });
+
+    return {
+      data: { success: true },
+      message: 'Left team successfully',
+      errors: null,
+    };
+  }
+
+  async transferLeadership(
+    teamId: string,
+    currentUserId: string,
+    dto: TransferLeadershipDto,
+  ) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+      select: {
+        id: true,
+        user_id: true,
+      },
+    });
+
+    if (!team) throw new NotFoundException('Team not found');
+    if (team.user_id !== currentUserId) {
+      throw new ForbiddenException('Only the current team lead can transfer leadership');
+    }
+
+    const targetMember = await this.prisma.teamRole.findFirst({
+      where: {
+        team_id: teamId,
+        user_id: dto.newLeaderUserId,
+        deleted_at: null,
+      },
+    });
+
+    if (!targetMember) {
+      throw new NotFoundException('Target member is not part of this team');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.team.update({
+        where: { id: teamId },
+        data: { user_id: dto.newLeaderUserId },
+      });
+      await tx.teamRole.updateMany({
+        where: { team_id: teamId, user_id: currentUserId },
+        data: { role: 'MEMBER' },
+      });
+      await tx.teamRole.updateMany({
+        where: { team_id: teamId, user_id: dto.newLeaderUserId },
+        data: { role: 'LEAD' },
+      });
+    });
+
+    return {
+      data: {
+        success: true,
+        newLeaderUserId: dto.newLeaderUserId,
+      },
+      message: 'Leadership transferred successfully',
+      errors: null,
+    };
+  }
+
   async listPublic(slug: string, query: TeamQueryDto) {
     const competition = await this.prisma.competition.findFirst({
       where: { slug, publication_status: 'PUBLISHED', deleted_at: null },
@@ -145,6 +367,7 @@ export class TeamService {
         roles: team.skills_suggestions.map((role) => role.name),
         memberCount: team._count.team_roles,
         maxTeamSize: competition.max_team_size,
+        matchScore: Math.min(99, 70 + team._count.team_roles * 7),
       })),
       meta: {
         total,
@@ -152,6 +375,8 @@ export class TeamService {
         limit: query.limit,
         totalPages: Math.ceil(total / query.limit),
       },
+      message: 'Teams retrieved successfully',
+      errors: null,
     };
   }
 
