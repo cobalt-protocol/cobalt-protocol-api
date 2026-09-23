@@ -56,6 +56,40 @@ export class TeamController {
     return this.teams.members(teamId, request?.userId);
   }
 
+  @Post('teams/:teamId/invites')
+  @ApiOperation({ summary: 'Create a private team invite code' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  createInvite(
+    @Param('teamId') teamId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.createInvite(teamId, request.userId);
+  }
+
+  @Post('teams/:teamId/invites/:inviteId/accept')
+  @ApiOperation({ summary: 'Accept a private team invite' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  acceptInvite(
+    @Param('teamId') teamId: string,
+    @Param('inviteId') inviteId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.acceptInvite(teamId, inviteId, request.userId);
+  }
+
+  @Post('teams/invites/:inviteId/accept')
+  @ApiOperation({ summary: 'Accept a private team invite by code' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  acceptInviteByCode(
+    @Param('inviteId') inviteId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.acceptInviteByReference(inviteId, request.userId);
+  }
+
   @Post('competitions/:slug/teams')
   @ApiOperation({ summary: 'Create a team in a competition' })
   @UseGuards(AuthSessionGuard)

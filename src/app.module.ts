@@ -15,6 +15,7 @@ import { OrganizerModule } from './modules/organizer/organizer.module.js';
 import { TeamModule } from './modules/team/team.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { PrizeWinnerModule } from './prize-winner/prize-winner.module.js';
+import { ProfileModule } from './modules/profile/profile.module.js';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PrizeWinnerModule } from './prize-winner/prize-winner.module.js';
     TeamModule,
     DashboardModule,
     OrganizerModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [

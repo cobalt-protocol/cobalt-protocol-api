@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { CreateTeamDto } from './dto/create-team.dto.js';
@@ -229,6 +230,111 @@ export class TeamService {
       message: 'Team members retrieved successfully',
       errors: null,
     };
+  }
+
+  async createInvite(teamId: string, leadId: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+      select: { id: true, user_id: true, visibility: true },
+    });
+    if (!team) throw new NotFoundException('Team not found');
+    if (team.user_id !== leadId)
+      throw new ForbiddenException('Only team lead can create invites');
+    if (team.visibility)
+      throw new ConflictException('Invites are only available for private teams');
+
+    const code = `COBALT-${randomBytes(5).toString('hex').toUpperCase()}`;
+    const invite = await this.prisma.teamCode.create({
+      data: { code, team_id: team.id },
+      select: { id: true, code: true, created_at: true },
+    });
+
+    return {
+      data: {
+        id: invite.id,
+        code: invite.code,
+        status: 'SENT',
+        createdAt: invite.created_at,
+      },
+      message: 'Team invite created successfully',
+      errors: null,
+    };
+  }
+
+  async acceptInvite(
+    teamId: string,
+    inviteReference: string,
+    userId: string,
+  ) {
+    return this.retrySerializable(async (tx) => {
+      const invite = await tx.teamCode.findFirst({
+        where: {
+          OR: [{ id: inviteReference }, { code: inviteReference.toUpperCase() }],
+          team: { id: teamId, deleted_at: null },
+        },
+        include: {
+          team: {
+            include: {
+              competition: true,
+              _count: { select: { team_roles: true } },
+            },
+          },
+        },
+      });
+      if (!invite?.team) throw new NotFoundException('Team invite not found');
+
+      const team = invite.team;
+      if (team.visibility)
+        throw new ConflictException('This team does not require an invite');
+      if (
+        team.competition.publication_status !== 'PUBLISHED' ||
+        team.competition.registration_window <= new Date()
+      )
+        throw new ConflictException('Registration is closed');
+      if (team._count.team_roles >= team.competition.max_team_size)
+        throw new ConflictException('Team is full');
+
+      const existing = await tx.teamRole.findFirst({
+        where: { user_id: userId, competition_id: team.competition_id },
+      });
+      if (existing)
+        throw new ConflictException(
+          'You already belong to a team in this competition',
+        );
+
+      const membership = await tx.teamRole.create({
+        data: {
+          team_id: team.id,
+          user_id: userId,
+          competition_id: team.competition_id,
+          role: 'MEMBER',
+        },
+        select: { id: true, team_id: true, role: true, created_at: true },
+      });
+
+      return {
+        data: {
+          success: true,
+          teamId: membership.team_id,
+          role: membership.role.toLowerCase(),
+          joinedAt: membership.created_at,
+        },
+        message: 'Joined team successfully',
+        errors: null,
+      };
+    });
+  }
+
+  async acceptInviteByReference(inviteReference: string, userId: string) {
+    const invite = await this.prisma.teamCode.findFirst({
+      where: {
+        OR: [{ id: inviteReference }, { code: inviteReference.toUpperCase() }],
+        team: { deleted_at: null },
+      },
+      select: { team_id: true },
+    });
+    if (!invite?.team_id) throw new NotFoundException('Team invite not found');
+    return this.acceptInvite(invite.team_id, inviteReference, userId);
   }
 
   async leaveTeam(teamId: string, userId: string) {

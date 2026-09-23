@@ -98,6 +98,7 @@ async function main() {
     update: { user_id: organizer.id, deleted_at: null },
     create: {
       id: randomUUID(),
+      tx_hash: '0x1234567890abcdef',
       avatar_url: 'https://placehold.co/256x256?text=Cobalt',
       name: 'Cobalt Demo Organizer',
       description: 'Dummy organizer for local API development',

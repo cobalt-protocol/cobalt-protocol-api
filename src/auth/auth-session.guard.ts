@@ -18,22 +18,29 @@ export class AuthSessionGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const match = /^Bearer ([A-Za-z0-9_-]{43,128})$/.exec(
+    const match = /^Bearer\s+(.+)$/i.exec(
       request.headers.authorization ?? '',
     );
-    if (!match) throw new UnauthorizedException('A valid session is required');
+
+    if (!match) {
+      throw new UnauthorizedException('A valid session is required');
+    }
+
     const tokenHash = createHash('sha256').update(match[1]).digest('hex');
     const session = await this.prisma.authSession.findUnique({
       where: { token_hash: tokenHash },
       include: { user: { select: { id: true, deleted_at: true } } },
     });
+
     if (
       !session ||
       session.revoked_at ||
       session.expires_at <= new Date() ||
       session.user.deleted_at
-    )
+    ) {
       throw new UnauthorizedException('Session is invalid or expired');
+    }
+
     request.userId = session.user.id;
     return true;
   }
