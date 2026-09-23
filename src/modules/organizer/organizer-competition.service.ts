@@ -40,6 +40,7 @@ export class OrganizerCompetitionService {
         tx_hash: '0x0000000000000000000000000000000000000000',
         token_address: '0x0000000000000000000000000000000000000000',
         competition_id: crypto.randomUUID(),
+        organizationId: organization.id,
         organization_id: organization.id,
         name: dto.title.trim(),
         category: dto.category.trim(),
@@ -61,10 +62,13 @@ export class OrganizerCompetitionService {
   }
 
   async list(userId: string, query: OrganizerCompetitionQueryDto) {
-    await this.requireOrganizer(userId);
+    const organization = await this.requireOrganizer(userId);
     const where: Prisma.CompetitionWhereInput = {
       deleted_at: null,
-      organization: { user_id: userId, deleted_at: null },
+      OR: [
+        { organization: { user_id: userId, deleted_at: null } },
+        { organization_id: organization.id },
+      ],
       ...(query.status && { publication_status: query.status }),
     };
     const [total, entries] = await Promise.all([
@@ -132,18 +136,22 @@ export class OrganizerCompetitionService {
     });
     if (!organization)
       throw new ForbiddenException('An organizer organization is required');
+    return organization;
   }
 
   private async findOwned(
     userId: string,
     id: string,
   ): Promise<OrganizerCompetition> {
-    await this.requireOrganizer(userId);
+    const organization = await this.requireOrganizer(userId);
     const entry = await this.prisma.competition.findFirst({
       where: {
         id,
         deleted_at: null,
-        organization: { user_id: userId, deleted_at: null },
+        OR: [
+          { organization: { user_id: userId, deleted_at: null } },
+          { organization_id: organization.id },
+        ],
       },
       include: organizerInclude,
     });

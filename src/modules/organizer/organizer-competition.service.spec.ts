@@ -76,7 +76,10 @@ describe('OrganizerCompetitionService', () => {
     expect(prisma.competition.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          organization: { user_id: 'organizer-b', deleted_at: null },
+          OR: [
+            { organization: { user_id: 'organizer-b', deleted_at: null } },
+            { organization_id: 'organization-b' },
+          ],
         }),
       }),
     );
