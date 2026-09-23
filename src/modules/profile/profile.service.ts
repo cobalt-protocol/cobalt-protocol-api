@@ -6,8 +6,8 @@ import {
 import { Prisma, SkillLevel } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { ProfileQueryDto } from './dto/profile-query.dto.js';
-import type { UpdateProfileDto } from './dto/update-profile.dto.js';
 import type { ProfileSkillLevel } from './dto/profile-skill.dto.js';
+import type { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 const publicSelect = {
   id: true,
@@ -15,7 +15,7 @@ const publicSelect = {
   location: true,
   institution: true,
   skill_description: { select: { description: true } },
-  skills: { select: { skill_name: true, level: true } },
+  skill: { select: { skill_name: true } },
 } satisfies Prisma.UserSelect;
 const privateSelect = {
   ...publicSelect,
@@ -24,12 +24,7 @@ const privateSelect = {
 } satisfies Prisma.UserSelect;
 type PublicProfile = Prisma.UserGetPayload<{ select: typeof publicSelect }>;
 type PrivateProfile = Prisma.UserGetPayload<{ select: typeof privateSelect }>;
-const fromDbLevel: Record<SkillLevel, ProfileSkillLevel> = {
-  INTERMEDIATE: 'Intermediate',
-  PROFICIENT: 'Proficient',
-  ADVANCED: 'Advanced',
-  EXPERT: 'Expert',
-};
+
 function presentPublic(user: PublicProfile) {
   return {
     id: user.id,
@@ -37,10 +32,9 @@ function presentPublic(user: PublicProfile) {
     location: user.location,
     institution: user.institution,
     pitch: user.skill_description?.description ?? '',
-    skills: user.skills.map((skill) => ({
-      name: skill.skill_name,
-      level: fromDbLevel[skill.level],
-    })),
+    skills: user.skill
+      ? [{ name: user.skill.skill_name, level: 'Proficient' as const }]
+      : [],
   };
 }
 function presentPrivate(user: PrivateProfile) {
@@ -76,10 +70,8 @@ export class ProfileService {
               { location: { contains: search, mode: 'insensitive' } },
               { institution: { contains: search, mode: 'insensitive' } },
               {
-                skills: {
-                  some: {
-                    skill_name: { contains: search, mode: 'insensitive' },
-                  },
+                skill: {
+                  skill_name: { contains: search, mode: 'insensitive' },
                 },
               },
             ],
@@ -148,15 +140,19 @@ export class ProfileService {
           });
         }
         if (dto.skills !== undefined) {
-          await tx.skill.deleteMany({ where: { user_id: userId } });
-          if (dto.skills.length)
-            await tx.skill.createMany({
-              data: dto.skills.map((skill) => ({
-                user_id: userId,
-                skill_name: skill.name.trim(),
-                level: toDbLevel[skill.level],
-              })),
+          const names = dto.skills
+            .map((skill) => skill.name.trim())
+            .filter(Boolean);
+          if (!names.length) {
+            await tx.skill.deleteMany({ where: { user_id: userId } });
+          } else {
+            const primarySkill = names[0];
+            await tx.skill.upsert({
+              where: { user_id: userId },
+              create: { user_id: userId, skill_name: primarySkill },
+              update: { skill_name: primarySkill },
             });
+          }
         }
       });
     } catch (error) {
