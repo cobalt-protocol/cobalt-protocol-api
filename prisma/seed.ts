@@ -11,7 +11,14 @@ const prisma = new PrismaClient({
   adapter: adapter,
 });
 const accessToken = 'dummy-user-access-token-for-testing-123456789';
-const organizationToken = 'dummy-organization-access-token-123456789';
+const organizationToken =
+  'dummy-organization-access-token-for-testing-123456789';
+
+for (const token of [accessToken, organizationToken]) {
+  if (!/^[A-Za-z0-9_-]{43,128}$/.test(token)) {
+    throw new Error('Dummy access tokens must satisfy AuthSessionGuard format');
+  }
+}
 
 async function main() {
   const tokenHash = createHash('sha256').update(accessToken).digest('hex');
@@ -81,13 +88,25 @@ async function main() {
     create: {
       id: randomUUID(),
       user_id: organizer.id,
-      token_hash: tokenHash,
+      token_hash: organizationTokenHash,
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     },
   });
 
-  console.log('Dummy organization:', organizer.id);
-  console.log('Dummy access token:', accessToken);
+  const organization = await prisma.organization.upsert({
+    where: { name: 'Cobalt Demo Organizer' },
+    update: { user_id: organizer.id, deleted_at: null },
+    create: {
+      id: randomUUID(),
+      avatar_url: 'https://placehold.co/256x256?text=Cobalt',
+      name: 'Cobalt Demo Organizer',
+      description: 'Dummy organizer for local API development',
+      user_id: organizer.id,
+    },
+  });
+
+  console.log('Dummy organization:', organization.id);
+  console.log('Dummy organizer access token:', organizationToken);
 }
 
 main()

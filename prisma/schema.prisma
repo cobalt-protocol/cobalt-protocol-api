@@ -37,12 +37,12 @@ model User {
 }
 
 model Skill {
-  id         String    @id @default(uuid())
+  id         String     @id @default(uuid())
   user_id    String
   skill_name String
   level      SkillLevel @default(INTERMEDIATE)
-  created_at DateTime  @default(now())
-  updated_at DateTime? @updatedAt
+  created_at DateTime   @default(now())
+  updated_at DateTime?  @updatedAt
   deleted_at DateTime?
 
   user User @relation(fields: [user_id], references: [id])
@@ -64,7 +64,7 @@ model AuthSession {
   token_hash String    @unique
   expires_at DateTime
   revoked_at DateTime?
-  created_at DateTime @default(now())
+  created_at DateTime  @default(now())
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -109,16 +109,17 @@ model Organization {
   updated_at  DateTime? @updatedAt
   deleted_at  DateTime?
 
-  user User @relation(fields: [user_id], references: [id])
+  user         User          @relation(fields: [user_id], references: [id])
+  competitions Competition[]
 
   @@map("organization")
 }
 
 model Competition {
-  id                      String    @id @default(uuid())
-  slug                    String?   @unique
-  max_team_size           Int       @default(5)
-  publication_status      String    @default("DRAFT")
+  id                      String                       @id @default(uuid())
+  slug                    String?                      @unique
+  max_team_size           Int                          @default(5)
+  publication_status      CompetitionPublicationStatus @default(DRAFT)
   name                    String
   category                String
   description             String
@@ -131,16 +132,23 @@ model Competition {
   pirze_certificate_claim DateTime
   certificate_cid         String
   guidebook_cid           String
-  created_at              DateTime  @default(now())
-  updated_at              DateTime? @updatedAt
+  created_at              DateTime                     @default(now())
+  updated_at              DateTime?                    @updatedAt
   deleted_at              DateTime?
+  organization_id         String?
 
+  organization  Organization?     @relation(fields: [organization_id], references: [id])
   prize_winners PrizeWinner[]
   teams         Team[]
   team_roles    TeamRole[]
   join_requests TeamJoinRequest[]
 
   @@map("competition")
+}
+
+enum CompetitionPublicationStatus {
+  DRAFT
+  PUBLISHED
 }
 
 model PrizeWinner {
@@ -206,36 +214,35 @@ model TeamCode {
 }
 
 model TeamRole {
-  id         String    @id @default(uuid())
-  role       String
-  user_id    String
-  team_id    String
+  id             String    @id @default(uuid())
+  role           String
+  user_id        String
+  team_id        String
   competition_id String
-  created_at DateTime  @default(now())
-  updated_at DateTime? @updatedAt
-  deleted_at DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
 
-  user User @relation(fields: [user_id], references: [id])
-  team Team @relation(fields: [team_id], references: [id])
+  user        User        @relation(fields: [user_id], references: [id])
+  team        Team        @relation(fields: [team_id], references: [id])
   competition Competition @relation(fields: [competition_id], references: [id])
 
   @@unique([user_id, competition_id])
   @@unique([user_id, team_id])
-
   @@map("team_role")
 }
 
 model TeamJoinRequest {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   user_id        String
   team_id        String
   competition_id String
-  status         String   @default("PENDING")
-  created_at     DateTime @default(now())
+  status         String    @default("PENDING")
+  created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
 
-  user User @relation(fields: [user_id], references: [id])
-  team Team @relation(fields: [team_id], references: [id])
+  user        User        @relation(fields: [user_id], references: [id])
+  team        Team        @relation(fields: [team_id], references: [id])
   competition Competition @relation(fields: [competition_id], references: [id])
 
   @@unique([competition_id, user_id])
