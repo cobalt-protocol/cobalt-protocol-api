@@ -35,7 +35,6 @@ import { PrizeWinnerModule } from './prize-winner/prize-winner.module.js';
   controllers: [AppController],
   providers: [
     AppService,
-    PrismaService,
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,

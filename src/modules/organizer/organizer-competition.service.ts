@@ -37,6 +37,9 @@ export class OrganizerCompetitionService {
 
     const entry = await this.prisma.competition.create({
       data: {
+        tx_hash: '0x0000000000000000000000000000000000000000',
+        token_address: '0x0000000000000000000000000000000000000000',
+        competition_id: crypto.randomUUID(),
         organization_id: organization.id,
         name: dto.title.trim(),
         category: dto.category.trim(),
@@ -131,7 +134,10 @@ export class OrganizerCompetitionService {
       throw new ForbiddenException('An organizer organization is required');
   }
 
-  private async findOwned(userId: string, id: string) {
+  private async findOwned(
+    userId: string,
+    id: string,
+  ): Promise<OrganizerCompetition> {
     await this.requireOrganizer(userId);
     const entry = await this.prisma.competition.findFirst({
       where: {
