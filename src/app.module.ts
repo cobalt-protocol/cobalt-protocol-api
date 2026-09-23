@@ -9,6 +9,7 @@ import { CompetitionModule } from './modules/competition/competition.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { ProfileModule } from './modules/profile/profile.module.js';
 import { TeamModule } from './modules/team/team.module.js';
+import { OrganizerModule } from './modules/organizer/organizer.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 
 @Module({
@@ -24,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
     CompetitionModule,
     TeamModule,
     DashboardModule,
+    OrganizerModule,
   ],
   controllers: [AppController],
   providers: [
