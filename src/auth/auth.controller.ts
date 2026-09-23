@@ -20,7 +20,7 @@ import { VerifySignatureDto } from './dto/verify-signature.dto.js';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('nonce')
   @HttpCode(HttpStatus.CREATED)
@@ -111,7 +111,7 @@ export class AuthController {
     return this.authService.verifySignature(dto);
   }
 
-  @Get('@me')
+  @Get('me')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Get current user profile using authorization header',
