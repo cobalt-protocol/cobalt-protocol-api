@@ -35,6 +35,8 @@ model User {
   nonce_certificate_participants NonceCertificateParticipant[]
   nonce_certificate_winners      NonceCertificateWinner[]
   competitions                   Competition[]
+  authSessions                   AuthSession[]
+  teamJoinRequests               TeamJoinRequest[]
 
   @@map("users")
 }
@@ -119,11 +121,11 @@ model Organization {
 }
 
 model Competition {
-  id                      String    @id @default(ulid())
+  id                      String                       @id @default(ulid())
   slug                    String?                      @unique
   max_team_size           Int                          @default(5)
   publication_status      CompetitionPublicationStatus @default(DRAFT)
-  tx_hash                 String    @unique
+  tx_hash                 String                       @unique
   name                    String
   category                String
   description             String
@@ -140,15 +142,27 @@ model Competition {
   user_id                 String?
   price_competition_id    String?
   competition_id          String
-  created_at              DateTime  @default(now())
-  updated_at              DateTime? @updatedAt
+  created_at              DateTime                     @default(now())
+  updated_at              DateTime?                    @updatedAt
   deleted_at              DateTime?
   organization_id         String?
 
-  prize_winners PrizeWinner[]
-  teams         Team[]
-  team_roles    TeamRole[]
-  join_requests TeamJoinRequest[]
+  prize_winners                PrizeWinner[]
+  teams                        Team[]
+  team_roles                   TeamRole[]
+  join_requests                TeamJoinRequest[]
+  user                         User?                         @relation(fields: [userId], references: [id])
+  userId                       String?
+  organization                 Organization?                 @relation(fields: [organizationId], references: [id])
+  organizationId               String?
+  nonceCertificateParticipants NonceCertificateParticipant[]
+  nonceCertificateWinners      NonceCertificateWinner[]
+  prizeDepositeds              PrizeDeposited[]
+  priceCompetition             PriceCompetition?             @relation(fields: [priceCompetitionId], references: [id])
+  priceCompetitionId           String?
+  competitionFeePaid           CompetitionFeePaid?
+  participantWinners           ParticipantWinner[]
+  prizeDistributeds            PrizeDistributed[]
 
   @@map("competition")
 }
@@ -223,10 +237,10 @@ model TeamCode {
 }
 
 model TeamRole {
-  id         String    @id @default(ulid())
-  role       String
-  user_id    String
-  team_id    String
+  id             String    @id @default(ulid())
+  role           String
+  user_id        String
+  team_id        String
   competition_id String
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt

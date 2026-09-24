@@ -10,7 +10,7 @@ describe('ProfileService privacy', () => {
     location: 'Jakarta',
     institution: 'Campus',
     skill_description: { description: 'Builder' },
-    skills: [{ skill_name: 'Rust', level: 'ADVANCED' }],
+    skill: { skill_name: 'Rust', level: 'ADVANCED' },
   };
   const prisma = {
     user: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
@@ -30,7 +30,7 @@ describe('ProfileService privacy', () => {
       location: 'Jakarta',
       institution: 'Campus',
       pitch: 'Builder',
-      skills: [{ name: 'Rust', level: 'Advanced' }],
+      skills: [{ name: 'Rust', level: 'Proficient' }],
     });
     expect(prisma.user.findFirst.mock.calls[0][0].select.email).toBeUndefined();
     expect(

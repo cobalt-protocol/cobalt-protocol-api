@@ -12,12 +12,11 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js';
 import './common/utils/bigint.util.js';
 import { HealthModule } from './health/health.module.js';
-import { CompetitionModule } from './modules/competition/competition.module.js';
+import { CompetitionModule as PublicCompetitionModule } from './modules/competition/competition.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { OrganizerModule } from './modules/organizer/organizer.module.js';
 import { TeamModule } from './modules/team/team.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
-import { PrizeWinnerModule } from './prize-winner/prize-winner.module.js';
 import { ProfileModule } from './modules/profile/profile.module.js';
 
 @Module({
@@ -31,6 +30,7 @@ import { ProfileModule } from './modules/profile/profile.module.js';
     HealthModule,
     AuthModule,
     CompetitionModule,
+    PublicCompetitionModule,
     PrizeWinnerModule,
     PriceCompetitionModule,
     TeamModule,
