@@ -33,6 +33,9 @@ describe('CompetitionService', () => {
       findMany: vi.fn(),
       findFirst: vi.fn(),
     },
+    listingTokenPrize: {
+      findMany: vi.fn(),
+    },
     prizeWinner: {
       findMany: vi.fn(),
     },
@@ -248,6 +251,43 @@ describe('CompetitionService', () => {
       await expect(service.getTokenPrizeByCompetitionId('invalid-id')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('findListingTokenPrizes', () => {
+    it('should return listing token prizes', async () => {
+      const mockListingTokenPrizes = [
+        {
+          id: '01J8Z9X0000000000000000001',
+          tx_hash: '0x1234567890abcdef',
+          listing_token_prize_id: 1n,
+          token_address: '0x1234567890123456789012345678901234567890',
+          is_active: true,
+          created_at: new Date('2026-09-23'),
+          updated_at: null,
+          deleted_at: null,
+        },
+      ];
+
+      mockPrismaService.listingTokenPrize.findMany.mockResolvedValue(mockListingTokenPrizes);
+
+      const result = await service.findListingTokenPrizes();
+
+      expect(mockPrismaService.listingTokenPrize.findMany).toHaveBeenCalledWith({
+        where: { deleted_at: null },
+        orderBy: { created_at: 'desc' },
+      });
+      expect(result).toEqual({
+        data: mockListingTokenPrizes,
+        message: 'Listing token prizes retrieved successfully',
+        errors: null,
+      });
+    });
+
+    it('should throw NotFoundException when no listing token prizes found', async () => {
+      mockPrismaService.listingTokenPrize.findMany.mockResolvedValue([]);
+
+      await expect(service.findListingTokenPrizes()).rejects.toThrow(NotFoundException);
     });
   });
 });

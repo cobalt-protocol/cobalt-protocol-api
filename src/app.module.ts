@@ -7,6 +7,7 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CompetitionModule } from './competition/competition.module.js';
 import { PrizeWinnerModule } from './prize-winner/prize-winner.module.js';
+import { PriceCompetitionModule } from './price-competition/price-competition.module.js';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js';
 import { HealthModule } from './health/health.module.js';
@@ -23,6 +24,7 @@ import { PrismaService } from './prisma/prisma.service.js';
     AuthModule,
     CompetitionModule,
     PrizeWinnerModule,
+    PriceCompetitionModule,
   ],
   controllers: [AppController],
   providers: [

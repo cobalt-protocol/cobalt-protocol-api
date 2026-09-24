@@ -19,10 +19,14 @@ describe('AuthService', () => {
   const mockPrismaService = {
     user: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       upsert: vi.fn(),
     },
     organization: {
+      findFirst: vi.fn(),
+    },
+    competition: {
       findFirst: vi.fn(),
     },
     nonceConnect: {
@@ -67,9 +71,9 @@ describe('AuthService', () => {
       expect(result.errors).toBeNull();
     });
 
-    it('should upsert user and insert nonce when wallet address exists', async () => {
+    it('should find or create user and insert nonce when wallet address exists', async () => {
       const walletAddress = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
-      mockPrismaService.user.upsert.mockResolvedValue(mockUser);
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
       mockPrismaService.nonceConnect.upsert.mockResolvedValue({
         id: 'nonce-1',
         nonce: 'abc',
@@ -78,12 +82,13 @@ describe('AuthService', () => {
 
       const result = await service.generateNonce({ walletAddress });
 
-      expect(mockPrismaService.user.upsert).toHaveBeenCalledWith({
-        where: { wallet_address: walletAddress.toLowerCase() },
-        create: expect.objectContaining({
-          wallet_address: walletAddress.toLowerCase(),
-        }),
-        update: {},
+      expect(mockPrismaService.user.findFirst).toHaveBeenCalledWith({
+        where: {
+          wallet_address: {
+            equals: walletAddress,
+            mode: 'insensitive',
+          },
+        },
       });
       expect(mockPrismaService.nonceConnect.upsert).toHaveBeenCalledWith({
         where: { user_id: mockUser.id },
@@ -128,6 +133,7 @@ describe('AuthService', () => {
       });
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
       mockPrismaService.organization.findFirst.mockResolvedValue(null);
+      mockPrismaService.competition.findFirst.mockResolvedValue(null);
 
       const result = await service.getMe('Bearer valid-token');
 
@@ -159,6 +165,22 @@ describe('AuthService', () => {
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
       mockPrismaService.organization.findFirst.mockResolvedValue({
         id: 'org-uuid-1',
+      });
+
+      const result = await service.getMe('Bearer valid-token');
+
+      expect(result.data.user.role).toBe('organization');
+    });
+
+    it('should return user profile with role "organization" when user has created a competition', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({
+        sub: mockUser.id,
+        wallet_address: mockUser.wallet_address,
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+      mockPrismaService.organization.findFirst.mockResolvedValue(null);
+      mockPrismaService.competition.findFirst.mockResolvedValue({
+        id: 'comp-uuid-1',
       });
 
       const result = await service.getMe('Bearer valid-token');

@@ -35,6 +35,7 @@ describe('CompetitionController', () => {
 
   const mockCompetitionService = {
     findAll: vi.fn(),
+    findListingTokenPrizes: vi.fn(),
     findOne: vi.fn(),
     findPrizeWinners: vi.fn(),
     getTokenPrizeByCompetitionId: vi.fn(),
@@ -158,6 +159,43 @@ describe('CompetitionController', () => {
         '01J8Z9X0000000000000000001',
       );
       expect(result).toEqual(mockTokenPrizeResponse);
+    });
+  });
+
+  describe('findListingTokenPrizes', () => {
+    it('should return list of listing token prizes', async () => {
+      const mockListingTokenPrizesResponse = {
+        data: [
+          {
+            id: '01J8Z9X0000000000000000001',
+            tx_hash: '0x1234567890abcdef',
+            listing_token_prize_id: 1n,
+            token_address: '0x1234567890123456789012345678901234567890',
+            is_active: true,
+            created_at: new Date('2026-09-23'),
+            updated_at: null,
+            deleted_at: null,
+          },
+        ],
+        message: 'Listing token prizes retrieved successfully',
+        errors: null,
+      };
+      mockCompetitionService.findListingTokenPrizes.mockResolvedValue(
+        mockListingTokenPrizesResponse,
+      );
+
+      const result = await controller.findListingTokenPrizes();
+
+      expect(mockCompetitionService.findListingTokenPrizes).toHaveBeenCalled();
+      expect(result).toEqual(mockListingTokenPrizesResponse);
+    });
+
+    it('should throw NotFoundException if service throws NotFoundException', async () => {
+      mockCompetitionService.findListingTokenPrizes.mockRejectedValue(
+        new NotFoundException('No listing token prizes found'),
+      );
+
+      await expect(controller.findListingTokenPrizes()).rejects.toThrow(NotFoundException);
     });
   });
 });

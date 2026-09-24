@@ -60,6 +60,48 @@ export class CompetitionController {
     return this.competitionService.findAll(authHeader);
   }
 
+  @Get('listing-token-prize')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get list of all listing token prizes',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listing token prizes retrieved successfully',
+    schema: {
+      example: {
+        data: [
+          {
+            id: '01J8Z9X0000000000000000001',
+            tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+            listing_token_prize_id: '1',
+            token_address: '0x1234567890123456789012345678901234567890',
+            is_active: true,
+            created_at: '2026-09-23T00:00:00.000Z',
+            updated_at: null,
+            deleted_at: null,
+          },
+        ],
+        message: 'Listing token prizes retrieved successfully',
+        errors: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No listing token prizes found',
+    schema: {
+      example: {
+        data: null,
+        message: 'No listing token prizes found',
+        errors: null,
+      },
+    },
+  })
+  async findListingTokenPrizes() {
+    return this.competitionService.findListingTokenPrizes();
+  }
+
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
