@@ -49,7 +49,29 @@ model Skill {
 
   user User @relation(fields: [user_id], references: [id])
 
+  @@unique([user_id, skill_name])
   @@map("skills")
+}
+
+enum SkillLevel {
+  INTERMEDIATE
+  PROFICIENT
+  ADVANCED
+  EXPERT
+}
+
+model AuthSession {
+  id         String    @id @default(uuid())
+  user_id    String
+  token_hash String    @unique
+  expires_at DateTime
+  revoked_at DateTime?
+  created_at DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("auth_sessions")
 }
 
 model SkillDescription {
@@ -90,13 +112,17 @@ model Organization {
   updated_at  DateTime? @updatedAt
   deleted_at  DateTime?
 
-  user User @relation(fields: [user_id], references: [id])
+  user         User          @relation(fields: [user_id], references: [id])
+  competitions Competition[]
 
   @@map("organization")
 }
 
 model Competition {
   id                      String    @id @default(ulid())
+  slug                    String?                      @unique
+  max_team_size           Int                          @default(5)
+  publication_status      CompetitionPublicationStatus @default(DRAFT)
   tx_hash                 String    @unique
   name                    String
   category                String
@@ -117,19 +143,19 @@ model Competition {
   created_at              DateTime  @default(now())
   updated_at              DateTime? @updatedAt
   deleted_at              DateTime?
+  organization_id         String?
 
-  user                           User?                         @relation(fields: [user_id], references: [id])
-  price_competition              PriceCompetition?             @relation(fields: [price_competition_id], references: [id])
-  prize_winners                  PrizeWinner[]
-  teams                          Team[]
-  nonce_certificate_participants NonceCertificateParticipant[]
-  nonce_certificate_winners      NonceCertificateWinner[]
-  prize_deposits                 PrizeDeposited[]
-  competition_fee_paid           CompetitionFeePaid?
-  participant_winners            ParticipantWinner[]
-  prize_distributions            PrizeDistributed[]
+  prize_winners PrizeWinner[]
+  teams         Team[]
+  team_roles    TeamRole[]
+  join_requests TeamJoinRequest[]
 
   @@map("competition")
+}
+
+enum CompetitionPublicationStatus {
+  DRAFT
+  PUBLISHED
 }
 
 model PrizeWinner {
@@ -165,6 +191,7 @@ model Team {
   skills_suggestions SkillsSuggestion[]
   team_codes         TeamCode[]
   team_roles         TeamRole[]
+  join_requests      TeamJoinRequest[]
 
   @@map("team")
 }
@@ -200,14 +227,36 @@ model TeamRole {
   role       String
   user_id    String
   team_id    String
-  created_at DateTime  @default(now())
-  updated_at DateTime? @updatedAt
-  deleted_at DateTime?
+  competition_id String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
 
-  user User @relation(fields: [user_id], references: [id])
-  team Team @relation(fields: [team_id], references: [id])
+  user        User        @relation(fields: [user_id], references: [id])
+  team        Team        @relation(fields: [team_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
 
+  @@unique([user_id, competition_id])
+  @@unique([user_id, team_id])
   @@map("team_role")
+}
+
+model TeamJoinRequest {
+  id             String    @id @default(uuid())
+  user_id        String
+  team_id        String
+  competition_id String
+  status         String    @default("PENDING")
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+
+  user        User        @relation(fields: [user_id], references: [id])
+  team        Team        @relation(fields: [team_id], references: [id])
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@unique([competition_id, user_id])
+  @@index([team_id, status])
+  @@map("team_join_requests")
 }
 
 model Winner {

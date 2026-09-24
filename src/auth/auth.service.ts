@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { verifyMessage } from 'viem';
 import { User } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -262,7 +262,27 @@ export class AuthService {
       sub: user.id,
       wallet_address: walletAddress,
     };
-    const token = this.jwtService.sign(payload);
+    const token = this.jwtService.sign(payload, {
+      expiresIn: '7d',
+    });
+
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.authSession.upsert({
+      where: { token_hash: tokenHash },
+      create: {
+        id: generateUlid(),
+        user_id: user.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+      },
+      update: {
+        user_id: user.id,
+        expires_at: expiresAt,
+        revoked_at: null,
+      },
+    });
 
     return {
       data: {

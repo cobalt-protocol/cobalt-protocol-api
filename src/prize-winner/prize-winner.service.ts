@@ -47,7 +47,9 @@ export class PrizeWinnerService {
     });
 
     if (!prizeWinners || prizeWinners.length === 0) {
-      throw new NotFoundException('No prize winners found for this competition');
+      throw new NotFoundException(
+        'No prize winners found for this competition',
+      );
     }
 
     return {
