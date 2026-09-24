@@ -66,10 +66,22 @@ export class AuthService {
         where: { user_id: userId },
         select: { id: true },
       });
-      return org ? 'organization' : 'user';
+      if (org) {
+        return 'organization';
+      }
+
+      const competition = await this.prisma.competition.findFirst({
+        where: { user_id: userId },
+        select: { id: true },
+      });
+      if (competition) {
+        return 'organization';
+      }
+
+      return 'user';
     } catch (dbError) {
       this.logger.warn(
-        `Could not query database for organization relation: ${dbError}`,
+        `Could not query database for user role relations: ${dbError}`,
       );
       return 'user';
     }
@@ -78,21 +90,30 @@ export class AuthService {
   async generateNonce(dto?: RequestNonceDto): Promise<NonceResponse> {
     const nonce = randomBytes(16).toString('hex');
     const walletAddress = dto?.walletAddress
-      ? dto.walletAddress.toLowerCase()
+      ? dto.walletAddress
       : undefined;
 
     let user: User | null = null;
 
     if (walletAddress) {
       try {
-        user = await this.prisma.user.upsert({
-          where: { wallet_address: walletAddress },
-          create: {
-            id: generateUlid(),
-            wallet_address: walletAddress,
+        user = await this.prisma.user.findFirst({
+          where: {
+            wallet_address: {
+              equals: walletAddress,
+              mode: 'insensitive',
+            },
           },
-          update: {},
         });
+
+        if (!user) {
+          user = await this.prisma.user.create({
+            data: {
+              id: generateUlid(),
+              wallet_address: walletAddress,
+            },
+          });
+        }
 
         await this.prisma.nonceConnect.upsert({
           where: { user_id: user.id },
@@ -134,13 +155,18 @@ export class AuthService {
   async verifySignature(
     dto: VerifySignatureDto,
   ): Promise<VerifySignatureResponse> {
-    const walletAddress = dto.walletAddress.toLowerCase();
+    const walletAddress = dto.walletAddress;
     let messageToVerify = dto.message;
     let storedNonce: string | undefined = dto.nonce;
 
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { wallet_address: walletAddress },
+      const user = await this.prisma.user.findFirst({
+        where: {
+          wallet_address: {
+            equals: walletAddress,
+            mode: 'insensitive',
+          },
+        },
         include: { nonce_connect: true },
       });
       if (user?.nonce_connect?.nonce) {
@@ -192,14 +218,24 @@ export class AuthService {
 
     let user: User | null = null;
     try {
-      user = await this.prisma.user.upsert({
-        where: { wallet_address: walletAddress },
-        create: {
-          id: generateUlid(),
-          wallet_address: walletAddress,
+      user = await this.prisma.user.findFirst({
+        where: {
+          wallet_address: {
+            equals: walletAddress,
+            mode: 'insensitive',
+          },
         },
-        update: {},
       });
+
+      if (!user) {
+        user = await this.prisma.user.create({
+          data: {
+            id: generateUlid(),
+            wallet_address: walletAddress,
+          },
+        });
+      }
+
       await this.prisma.nonceConnect.deleteMany({
         where: { user_id: user.id },
       });
@@ -289,8 +325,13 @@ export class AuthService {
         });
       }
       if (!user && walletAddress) {
-        user = await this.prisma.user.findUnique({
-          where: { wallet_address: walletAddress.toLowerCase() },
+        user = await this.prisma.user.findFirst({
+          where: {
+            wallet_address: {
+              equals: walletAddress,
+              mode: 'insensitive',
+            },
+          },
         });
       }
     } catch (dbError) {

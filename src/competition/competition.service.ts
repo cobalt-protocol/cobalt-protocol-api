@@ -29,9 +29,7 @@ export class CompetitionService {
       try {
         const payload = await this.jwtService.verifyAsync(token);
         userId = payload.sub ?? null;
-        walletAddress = payload.wallet_address
-          ? payload.wallet_address.toLowerCase()
-          : null;
+        walletAddress = payload.wallet_address ?? null;
       } catch {
         throw new UnauthorizedException('Invalid or expired token');
       }
@@ -45,14 +43,23 @@ export class CompetitionService {
           where: {
             OR: [
               ...(userId ? [{ id: userId }] : []),
-              ...(walletAddress ? [{ wallet_address: walletAddress }] : []),
+              ...(walletAddress
+                ? [
+                    {
+                      wallet_address: {
+                        equals: walletAddress,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  ]
+                : []),
             ],
           },
         });
 
         if (user) {
           userId = user.id;
-          walletAddress = user.wallet_address.toLowerCase();
+          walletAddress = user.wallet_address;
         }
       } catch (dbError) {
         this.logger.warn(`Could not lookup user during competition filter: ${dbError}`);
@@ -212,6 +219,27 @@ export class CompetitionService {
     return {
       data: competitions,
       message: 'Competitions retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async findListingTokenPrizes() {
+    const listingTokenPrizes = await this.prisma.listingTokenPrize.findMany({
+      where: {
+        deleted_at: null,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (!listingTokenPrizes || listingTokenPrizes.length === 0) {
+      throw new NotFoundException('No listing token prizes found');
+    }
+
+    return {
+      data: listingTokenPrizes,
+      message: 'Listing token prizes retrieved successfully',
       errors: null,
     };
   }
