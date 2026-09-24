@@ -15,6 +15,7 @@ const publicSelect = {
   location: true,
   institution: true,
   skill_description: { select: { description: true } },
+  social_media: { select: { github_link: true, linkedin_link: true } },
   skill: { select: { skill_name: true } },
 } satisfies Prisma.UserSelect;
 const privateSelect = {
@@ -32,6 +33,17 @@ function presentPublic(user: PublicProfile) {
     location: user.location,
     institution: user.institution,
     pitch: user.skill_description?.description ?? '',
+    description: user.skill_description?.description ?? '',
+    social_media: user.social_media
+      ? {
+          github_link: user.social_media.github_link,
+          linkedin_link: user.social_media.linkedin_link,
+        }
+      : null,
+    github_link: user.social_media?.github_link ?? null,
+    linkedin_link: user.social_media?.linkedin_link ?? null,
+    githubLink: user.social_media?.github_link ?? null,
+    linkedinLink: user.social_media?.linkedin_link ?? null,
     skills: user.skill
       ? [{ name: user.skill.skill_name, level: 'Proficient' as const }]
       : [],
@@ -45,7 +57,7 @@ function presentPrivate(user: PrivateProfile) {
   };
 }
 
-const toDbLevel: Record<ProfileSkillLevel, SkillLevel> = {
+const _toDbLevel: Record<ProfileSkillLevel, SkillLevel> = {
   Intermediate: SkillLevel.INTERMEDIATE,
   Proficient: SkillLevel.PROFICIENT,
   Advanced: SkillLevel.ADVANCED,
@@ -119,26 +131,76 @@ export class ProfileService {
       if (names.some((name) => !name) || new Set(names).size !== names.length)
         throw new ConflictException('Skill names must be unique and nonempty');
     }
+
+    const description = dto.description ?? dto.pitch;
+    const githubLink =
+      dto.github_link ??
+      dto.githubLink ??
+      dto.social_media?.github_link ??
+      dto.social_media?.githubLink ??
+      dto.socialMedia?.github_link ??
+      dto.socialMedia?.githubLink;
+
+    const linkedinLink =
+      dto.linkedin_link ??
+      dto.linkedinLink ??
+      dto.social_media?.linkedin_link ??
+      dto.social_media?.linkedinLink ??
+      dto.socialMedia?.linkedin_link ??
+      dto.socialMedia?.linkedinLink;
+
     try {
       await this.prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: userId },
-          data: {
-            ...(dto.username !== undefined && { username: dto.username }),
-            ...(dto.email !== undefined && { email: dto.email.toLowerCase() }),
-            ...(dto.location !== undefined && { location: dto.location }),
-            ...(dto.institution !== undefined && {
-              institution: dto.institution,
-            }),
-          },
-        });
-        if (dto.pitch !== undefined) {
-          await tx.skillDescription.upsert({
-            where: { user_id: userId },
-            create: { user_id: userId, description: dto.pitch },
-            update: { description: dto.pitch },
+        if (
+          dto.username !== undefined ||
+          dto.email !== undefined ||
+          dto.location !== undefined ||
+          dto.institution !== undefined
+        ) {
+          await tx.user.update({
+            where: { id: userId },
+            data: {
+              ...(dto.username !== undefined && { username: dto.username }),
+              ...(dto.email !== undefined && { email: dto.email.toLowerCase() }),
+              ...(dto.location !== undefined && { location: dto.location }),
+              ...(dto.institution !== undefined && {
+                institution: dto.institution,
+              }),
+            },
           });
         }
+
+        if (description !== undefined) {
+          await tx.skillDescription.upsert({
+            where: { user_id: userId },
+            create: { user_id: userId, description },
+            update: { description },
+          });
+        }
+
+        if (githubLink !== undefined || linkedinLink !== undefined) {
+          const currentSocial = await tx.socialMedia.findUnique({
+            where: { user_id: userId },
+          });
+          if (currentSocial) {
+            await tx.socialMedia.update({
+              where: { user_id: userId },
+              data: {
+                ...(githubLink !== undefined && { github_link: githubLink }),
+                ...(linkedinLink !== undefined && { linkedin_link: linkedinLink }),
+              },
+            });
+          } else {
+            await tx.socialMedia.create({
+              data: {
+                user_id: userId,
+                github_link: githubLink ?? '',
+                linkedin_link: linkedinLink ?? '',
+              },
+            });
+          }
+        }
+
         if (dto.skills !== undefined) {
           const names = dto.skills
             .map((skill) => skill.name.trim())

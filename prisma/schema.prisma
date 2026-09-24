@@ -130,6 +130,7 @@ model Competition {
   category                String
   description             String
   requirement             String
+  formation               String
   registration_window     DateTime
   competition_window      DateTime
   submission_deadline     DateTime
@@ -426,4 +427,14 @@ model PrizeDistributed {
   competition Competition @relation(fields: [competition_id], references: [id])
 
   @@map("prize_distributed")
+}
+
+model IndexerState {
+  id                 String    @id @default(ulid())
+  contract_name      String    @unique
+  last_scanned_block Int
+  created_at         DateTime  @default(now())
+  updated_at         DateTime? @updatedAt
+
+  @@map("indexer_state")
 }

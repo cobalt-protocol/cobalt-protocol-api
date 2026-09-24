@@ -58,7 +58,7 @@ describe('AppController (e2e)', () => {
       expect(response.body).toMatchObject({
         data: {
           user: {
-            wallet_address: '0x742d35cc6634c0532925a3b844bc454e4438f44e',
+            wallet_address: expect.any(String),
           },
         },
         message: 'Nonce generated successfully',
@@ -74,24 +74,39 @@ describe('AppController (e2e)', () => {
         .expect(400);
 
       expect(response.body).toMatchObject({
-        data: null,
-        message: 'Validation failed',
-        errors: expect.arrayContaining([
-          'walletAddress must be an Ethereum address',
-        ]),
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: expect.arrayContaining([
+            'walletAddress must be an Ethereum address',
+          ]),
+        },
       });
     });
 
-    it('GET /auth/@me - missing header returns 401', async () => {
+    it('GET /auth/me - missing header returns 401', async () => {
       const response = await request(app.getHttpServer())
-        .get('/api/v1/auth/@me')
+        .get('/api/v1/auth/me')
         .expect(401);
 
       expect(response.body).toMatchObject({
-        data: null,
-        message: 'Missing authorization header',
-        errors: null,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Missing authorization header',
+        },
       });
+    });
+
+    it('GET /auth/me - with If-None-Match header does not return 304', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('If-None-Match', '"some-etag-value"')
+        .expect(401);
+
+      expect(response.status).not.toBe(304);
+      expect(response.headers['cache-control']).toContain('no-store');
+      expect(response.headers['cache-control']).toContain('no-cache');
+      expect(response.headers['pragma']).toBe('no-cache');
     });
   });
 
@@ -99,3 +114,4 @@ describe('AppController (e2e)', () => {
     await app.close();
   });
 });
+

@@ -7,7 +7,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
 import { verifyMessage } from 'viem';
-import { User } from '../generated/prisma/client.js';
+import {
+  User,
+  SkillDescription,
+  SocialMedia,
+  Skill,
+} from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { generateUlid } from '../common/utils/ulid.util.js';
 import { RequestNonceDto } from './dto/request-nonce.dto.js';
@@ -17,6 +22,10 @@ export type UserRole = 'organization' | 'user';
 
 export type UserWithRole = User & {
   role: UserRole;
+  skill_description?: SkillDescription | null;
+  social_media?: SocialMedia | null;
+  skill?: Skill | null;
+  skills?: Skill[];
 };
 
 export interface NonceData {
@@ -107,25 +116,38 @@ export class AuthService {
         });
 
         if (!user) {
-          user = await this.prisma.user.create({
-            data: {
+          try {
+            user = await this.prisma.user.create({
+              data: {
+                id: generateUlid(),
+                wallet_address: walletAddress,
+              },
+            });
+          } catch {
+            user = await this.prisma.user.findFirst({
+              where: {
+                wallet_address: {
+                  equals: walletAddress,
+                  mode: 'insensitive',
+                },
+              },
+            });
+          }
+        }
+
+        if (user) {
+          await this.prisma.nonceConnect.upsert({
+            where: { user_id: user.id },
+            create: {
               id: generateUlid(),
-              wallet_address: walletAddress,
+              nonce,
+              user_id: user.id,
+            },
+            update: {
+              nonce,
             },
           });
         }
-
-        await this.prisma.nonceConnect.upsert({
-          where: { user_id: user.id },
-          create: {
-            id: generateUlid(),
-            nonce,
-            user_id: user.id,
-          },
-          update: {
-            nonce,
-          },
-        });
       } catch (dbError) {
         this.logger.warn(`Could not persist nonce to database: ${dbError}`);
         user = {
@@ -228,67 +250,83 @@ export class AuthService {
       });
 
       if (!user) {
-        user = await this.prisma.user.create({
-          data: {
-            id: generateUlid(),
-            wallet_address: walletAddress,
-          },
-        });
+        try {
+          user = await this.prisma.user.create({
+            data: {
+              id: generateUlid(),
+              wallet_address: walletAddress,
+            },
+          });
+        } catch {
+          user = await this.prisma.user.findFirst({
+            where: {
+              wallet_address: {
+                equals: walletAddress,
+                mode: 'insensitive',
+              },
+            },
+          });
+        }
       }
 
-      await this.prisma.nonceConnect.deleteMany({
-        where: { user_id: user.id },
-      });
+      if (user) {
+        await this.prisma.nonceConnect.deleteMany({
+          where: { user_id: user.id },
+        });
+      }
     } catch (dbError) {
       this.logger.warn(
         `Could not sync user or clear nonce from database: ${dbError}`,
       );
-      user = {
-        id: generateUlid(),
-        wallet_address: walletAddress,
-        username: null,
-        email: null,
-        location: null,
-        institution: null,
-        created_at: new Date(),
-        updated_at: null,
-        deleted_at: null,
-      };
     }
 
-    const role = await this.getUserRole(user.id);
+    const activeUser: User = user ?? {
+      id: generateUlid(),
+      wallet_address: walletAddress,
+      username: null,
+      email: null,
+      location: null,
+      institution: null,
+      created_at: new Date(),
+      updated_at: null,
+      deleted_at: null,
+    };
+
+    const role = await this.getUserRole(activeUser.id);
 
     const payload = {
-      sub: user.id,
+      sub: activeUser.id,
       wallet_address: walletAddress,
     };
-    const token = this.jwtService.sign(payload, {
-      expiresIn: '7d',
-    });
+    const token = this.jwtService.sign(payload);
 
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date('2099-12-31T23:59:59.999Z');
 
-    await this.prisma.authSession.upsert({
-      where: { token_hash: tokenHash },
-      create: {
-        id: generateUlid(),
-        user_id: user.id,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
-      },
-      update: {
-        user_id: user.id,
-        expires_at: expiresAt,
-        revoked_at: null,
-      },
-    });
+    try {
+      await this.prisma.authSession.upsert({
+        where: { token_hash: tokenHash },
+        create: {
+          id: generateUlid(),
+          user_id: activeUser.id,
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+        },
+        update: {
+          user_id: activeUser.id,
+          expires_at: expiresAt,
+          revoked_at: null,
+        },
+      });
+    } catch (dbError) {
+      this.logger.warn(`Could not persist auth session: ${dbError}`);
+    }
 
     return {
       data: {
         token,
         user: {
-          ...user,
+          ...activeUser,
           role,
         },
       },
@@ -317,11 +355,16 @@ export class AuthService {
     const userId = payload.sub;
     const walletAddress = payload.wallet_address;
 
-    let user: User | null = null;
+    let user: any = null;
     try {
       if (userId) {
         user = await this.prisma.user.findUnique({
           where: { id: userId },
+          include: {
+            skill_description: true,
+            social_media: true,
+            skill: true,
+          },
         });
       }
       if (!user && walletAddress) {
@@ -331,6 +374,11 @@ export class AuthService {
               equals: walletAddress,
               mode: 'insensitive',
             },
+          },
+          include: {
+            skill_description: true,
+            social_media: true,
+            skill: true,
           },
         });
       }
@@ -349,6 +397,9 @@ export class AuthService {
         user: {
           ...user,
           role,
+          skill_description: user.skill_description ?? null,
+          social_media: user.social_media ?? null,
+          skills: user.skills ?? (user.skill ? [user.skill] : []),
         },
       },
       message: 'User profile retrieved successfully',

@@ -35,6 +35,12 @@ export class CreateOrganizerCompetitionDto {
   @MaxLength(10_000)
   requirements: string;
 
+  @ApiPropertyOptional({ example: 'Team of 1-5' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  formation?: string;
+
   @ApiPropertyOptional({ default: 5, minimum: 1, maximum: 20 })
   @IsOptional()
   @Type(() => Number)

@@ -8,7 +8,6 @@ import { AuthService } from './auth.service.js';
   imports: [
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'cobalt-protocol-jwt-secret-key-2026',
-      signOptions: { expiresIn: '7d' },
     }),
   ],
   controllers: [AuthController],

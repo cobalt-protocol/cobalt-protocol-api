@@ -17,6 +17,7 @@ describe('OrganizerCompetitionService', () => {
     category: 'Web3',
     description: 'Build useful things',
     requirement: 'Working prototype',
+    formation: '',
     max_team_size: 5,
     registration_window: now,
     competition_window: new Date('2026-10-02T00:00:00.000Z'),

@@ -154,7 +154,7 @@ export class CompetitionService {
           },
         },
         {
-          nonce_certificate_participants: {
+          nonceCertificateParticipants: {
             some: {
               OR: [
                 ...(userId ? [{ user_id: userId }] : []),
@@ -175,7 +175,7 @@ export class CompetitionService {
           },
         },
         {
-          nonce_certificate_winners: {
+          nonceCertificateWinners: {
             some: {
               OR: [
                 ...(userId ? [{ user_id: userId }] : []),

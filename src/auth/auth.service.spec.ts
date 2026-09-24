@@ -140,6 +140,11 @@ describe('AuthService', () => {
       expect(mockJwtService.verifyAsync).toHaveBeenCalledWith('valid-token');
       expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
         where: { id: mockUser.id },
+        include: {
+          skill_description: true,
+          social_media: true,
+          skill: true,
+        },
       });
       expect(mockPrismaService.organization.findFirst).toHaveBeenCalledWith({
         where: { user_id: mockUser.id },
@@ -150,6 +155,9 @@ describe('AuthService', () => {
           user: {
             ...mockUser,
             role: 'user',
+            skill_description: null,
+            social_media: null,
+            skills: [],
           },
         },
         message: 'User profile retrieved successfully',
