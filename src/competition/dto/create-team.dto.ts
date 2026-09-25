@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsOptional, IsString } from 'class-validator';
 
-export class CreateTeamDto {
+export class CreateCompetitionTeamDto {
   @ApiPropertyOptional({
     description: 'Team name',
     example: 'Cyber Warriors',

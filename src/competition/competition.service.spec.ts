@@ -45,6 +45,11 @@ describe('CompetitionService', () => {
     user: {
       findFirst: vi.fn(),
     },
+    team: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+    },
   };
 
   const mockJwtService = {
@@ -288,6 +293,228 @@ describe('CompetitionService', () => {
       mockPrismaService.listingTokenPrize.findMany.mockResolvedValue([]);
 
       await expect(service.findListingTokenPrizes()).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findMyTeams', () => {
+    it('should throw UnauthorizedException when no auth header is provided', async () => {
+      await expect(service.findMyTeams(undefined)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException when auth header format is invalid', async () => {
+      await expect(service.findMyTeams('Basic token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException when jwt verification fails', async () => {
+      mockJwtService.verifyAsync.mockRejectedValue(new Error('Invalid token'));
+
+      await expect(service.findMyTeams('Bearer invalid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException when user is not found', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(null);
+
+      await expect(service.findMyTeams('Bearer valid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should return user teams successfully', async () => {
+      const mockUser = { id: 'user-1', wallet_address: '0x123' };
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Cyber Warriors',
+          user_id: 'user-1',
+          skills_suggestions: [],
+          team_codes: [],
+          team_roles: [],
+        },
+      ];
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.team.findMany.mockResolvedValue(mockTeams);
+
+      const result = await service.findMyTeams('Bearer valid-token');
+
+      expect(mockPrismaService.team.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [
+              { user_id: 'user-1' },
+              { team_roles: { some: { user_id: 'user-1' } } },
+            ],
+            deleted_at: null,
+          }),
+        }),
+      );
+      expect(result).toEqual({
+        data: mockTeams,
+        message: 'Teams retrieved successfully',
+        errors: null,
+      });
+    });
+  });
+
+  describe('findMyTeamByCompetitionId', () => {
+    it('should throw UnauthorizedException when no auth header is provided', async () => {
+      await expect(service.findMyTeamByCompetitionId('comp-1', undefined)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw NotFoundException when competition is not found', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue({ id: 'user-1' });
+      mockPrismaService.competition.findFirst.mockResolvedValue(null);
+
+      await expect(service.findMyTeamByCompetitionId('comp-1', 'Bearer valid-token')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return user team for competition when found', async () => {
+      const mockUser = { id: 'user-1', wallet_address: '0x123' };
+      const mockCompetition = { id: 'comp-1', slug: 'comp-1' };
+      const mockTeam = {
+        id: 'team-1',
+        name: 'Cyber Warriors',
+        competition_id: 'comp-1',
+        user_id: 'user-1',
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockCompetition);
+      mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
+
+      const result = await service.findMyTeamByCompetitionId('comp-1', 'Bearer valid-token');
+
+      expect(result).toEqual({
+        data: mockTeam,
+        message: 'Team retrieved successfully',
+        errors: null,
+      });
+    });
+  });
+
+  describe('createTeam', () => {
+    it('should throw UnauthorizedException when no auth header is provided', async () => {
+      await expect(
+        service.createTeam('comp-1', undefined, { visibility: true, description: 'desc' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when auth header format is invalid', async () => {
+      await expect(
+        service.createTeam('comp-1', 'Basic token', { visibility: true, description: 'desc' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when jwt verification fails', async () => {
+      mockJwtService.verifyAsync.mockRejectedValue(new Error('Invalid token'));
+
+      await expect(
+        service.createTeam('comp-1', 'Bearer invalid-token', { visibility: true, description: 'desc' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw NotFoundException when competition is not found', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue({ id: 'user-1' });
+      mockPrismaService.competition.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createTeam('invalid-comp', 'Bearer valid-token', { visibility: true, description: 'desc' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should successfully create a team with code and skill suggestions', async () => {
+      const mockUser = { id: 'user-1', wallet_address: '0x123' };
+      const mockComp = { id: 'comp-1', name: 'Hackathon 2026' };
+      const mockCreatedTeam = {
+        id: 'team-1',
+        name: 'Alpha Team',
+        visibility: true,
+        description: 'Test description',
+        competition_id: 'comp-1',
+        user_id: 'user-1',
+        skills_suggestions: [{ id: 'sk-1', name: 'Solidity', team_id: 'team-1' }],
+        team_codes: [{ id: 'tc-1', code: 'COBALT-ABC1234567', team_id: 'team-1' }],
+        team_roles: [{ id: 'tr-1', role: 'LEAD', user_id: 'user-1', team_id: 'team-1' }],
+        created_at: new Date('2026-09-24'),
+        updated_at: null,
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.team.create.mockResolvedValue(mockCreatedTeam);
+
+      const dto = {
+        name: 'Alpha Team',
+        visibility: true,
+        description: 'Test description',
+        skills_suggestion: ['Solidity'],
+      };
+
+      const result = await service.createTeam('comp-1', 'Bearer valid-token', dto);
+
+      expect(mockPrismaService.team.create).toHaveBeenCalled();
+      expect(result.message).toBe('Team created successfully');
+      expect(result.data.name).toBe('Alpha Team');
+      expect(result.data.skills_suggestions).toHaveLength(1);
+      expect(result.data.team_code).toBeDefined();
+    });
+
+    it('should create a private team without generating a team code', async () => {
+      const mockUser = { id: 'user-1', wallet_address: '0x123' };
+      const mockComp = { id: 'comp-1', name: 'Hackathon 2026' };
+      const mockCreatedTeam = {
+        id: 'team-2',
+        name: 'Private Team',
+        visibility: false,
+        description: 'Private description',
+        competition_id: 'comp-1',
+        user_id: 'user-1',
+        skills_suggestions: [],
+        team_codes: [],
+        team_roles: [{ id: 'tr-1', role: 'LEAD', user_id: 'user-1', team_id: 'team-2' }],
+        created_at: new Date('2026-09-24'),
+        updated_at: null,
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.team.create.mockResolvedValue(mockCreatedTeam);
+
+      const dto = {
+        name: 'Private Team',
+        visibility: false,
+        description: 'Private description',
+      };
+
+      const result = await service.createTeam('comp-1', 'Bearer valid-token', dto);
+
+      expect(mockPrismaService.team.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            visibility: false,
+          }),
+        }),
+      );
+      const createData = mockPrismaService.team.create.mock.calls[mockPrismaService.team.create.mock.calls.length - 1][0].data;
+      expect(createData.team_codes).toBeUndefined();
+      expect(result.data.team_code).toBeNull();
     });
   });
 });

@@ -36,9 +36,12 @@ describe('CompetitionController', () => {
   const mockCompetitionService = {
     findAll: vi.fn(),
     findListingTokenPrizes: vi.fn(),
+    findMyTeams: vi.fn(),
+    findMyTeamByCompetitionId: vi.fn(),
     findOne: vi.fn(),
     findPrizeWinners: vi.fn(),
     getTokenPrizeByCompetitionId: vi.fn(),
+    createTeam: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -196,6 +199,88 @@ describe('CompetitionController', () => {
       );
 
       await expect(controller.findListingTokenPrizes()).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findMyTeams', () => {
+    it('should return teams for the authenticated user', async () => {
+      const mockTeamsResponse = {
+        data: [
+          {
+            id: 'team-1',
+            name: 'Cyber Warriors',
+            visibility: true,
+            user_id: 'user-1',
+          },
+        ],
+        message: 'Teams retrieved successfully',
+        errors: null,
+      };
+      mockCompetitionService.findMyTeams.mockResolvedValue(mockTeamsResponse);
+
+      const result = await controller.findMyTeams('Bearer valid-token');
+
+      expect(mockCompetitionService.findMyTeams).toHaveBeenCalledWith('Bearer valid-token');
+      expect(result).toEqual(mockTeamsResponse);
+    });
+  });
+
+  describe('findMyTeamByCompetitionId', () => {
+    it('should return team for competition for the authenticated user', async () => {
+      const mockTeamResponse = {
+        data: {
+          id: 'team-1',
+          name: 'Cyber Warriors',
+          visibility: true,
+          user_id: 'user-1',
+          competition_id: 'comp-1',
+        },
+        message: 'Team retrieved successfully',
+        errors: null,
+      };
+      mockCompetitionService.findMyTeamByCompetitionId.mockResolvedValue(mockTeamResponse);
+
+      const result = await controller.findMyTeamByCompetitionId('comp-1', 'Bearer valid-token');
+
+      expect(mockCompetitionService.findMyTeamByCompetitionId).toHaveBeenCalledWith(
+        'comp-1',
+        'Bearer valid-token',
+      );
+      expect(result).toEqual(mockTeamResponse);
+    });
+  });
+
+  describe('createTeam', () => {
+    it('should create a team for a competition', async () => {
+      const mockTeamResponse = {
+        data: {
+          id: 'team-1',
+          name: 'Test Team',
+          visibility: true,
+          description: 'Team description',
+          competition_id: 'comp-1',
+          user_id: 'user-1',
+          team_code: 'COBALT-123456',
+          team_codes: [{ id: 'tc-1', code: 'COBALT-123456' }],
+          skills_suggestions: [{ id: 'sk-1', name: 'React' }],
+          created_at: new Date(),
+        },
+        message: 'Team created successfully',
+        errors: null,
+      };
+      mockCompetitionService.createTeam.mockResolvedValue(mockTeamResponse);
+
+      const dto = {
+        name: 'Test Team',
+        visibility: true,
+        description: 'Team description',
+        skills: ['React'],
+      };
+
+      const result = await controller.createTeam('comp-1', 'Bearer token', dto);
+
+      expect(mockCompetitionService.createTeam).toHaveBeenCalledWith('comp-1', 'Bearer token', dto);
+      expect(result).toEqual(mockTeamResponse);
     });
   });
 });
