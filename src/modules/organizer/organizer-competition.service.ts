@@ -46,6 +46,7 @@ export class OrganizerCompetitionService {
         category: dto.category.trim(),
         description: dto.description.trim(),
         requirement: dto.requirements.trim(),
+        formation: dto.formation?.trim() ?? '',
         max_team_size: dto.maxTeamSize ?? 5,
         registration_window: new Date(dto.registrationEndsAt),
         competition_window: new Date(dto.startsAt),
@@ -170,6 +171,9 @@ export class OrganizerCompetitionService {
       ...(dto.requirements !== undefined && {
         requirement: dto.requirements.trim(),
       }),
+      ...(dto.formation !== undefined && {
+        formation: dto.formation.trim(),
+      }),
       ...(dto.maxTeamSize !== undefined && {
         max_team_size: dto.maxTeamSize,
       }),
@@ -251,6 +255,7 @@ export class OrganizerCompetitionService {
       category: entry.category,
       description: entry.description,
       requirements: entry.requirement,
+      formation: entry.formation,
       maxTeamSize: entry.max_team_size,
       registrationEndsAt: entry.registration_window,
       startsAt: entry.competition_window,

@@ -2,10 +2,12 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Headers,
   HttpCode,
   HttpStatus,
   Post,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -13,6 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { NoCacheInterceptor } from '../common/interceptors/no-cache.interceptor.js';
 import { AuthService } from './auth.service.js';
 import { RequestNonceDto } from './dto/request-nonce.dto.js';
 import { VerifySignatureDto } from './dto/verify-signature.dto.js';
@@ -112,7 +115,12 @@ export class AuthController {
   }
 
   @Get('me')
+  @UseInterceptors(NoCacheInterceptor)
   @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  @Header('Surrogate-Control', 'no-store')
   @ApiOperation({
     summary: 'Get current user profile using authorization header',
   })
@@ -134,6 +142,33 @@ export class AuthController {
             created_at: '2026-09-23T00:00:00.000Z',
             updated_at: null,
             deleted_at: null,
+            skill_description: {
+              id: '01H1234567890ABCDEFGHJKMNP',
+              user_id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
+              description: 'Full-stack Web3 Developer',
+              created_at: '2026-09-23T00:00:00.000Z',
+              updated_at: null,
+              deleted_at: null,
+            },
+            social_media: {
+              id: '01H1234567890ABCDEFGHJKMNQ',
+              user_id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
+              github_link: 'https://github.com/user',
+              linkedin_link: 'https://linkedin.com/in/user',
+              created_at: '2026-09-23T00:00:00.000Z',
+              updated_at: null,
+              deleted_at: null,
+            },
+            skills: [
+              {
+                id: '01H1234567890ABCDEFGHJKMNR',
+                user_id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
+                skill_name: 'Solidity',
+                created_at: '2026-09-23T00:00:00.000Z',
+                updated_at: null,
+                deleted_at: null,
+              },
+            ],
           },
         },
         message: 'User profile retrieved successfully',

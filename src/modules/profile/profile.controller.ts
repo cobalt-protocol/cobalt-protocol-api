@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -33,8 +34,10 @@ export class ProfileController {
     return this.profiles.findMine(request.userId);
   }
   @Patch('me')
+  @Put('me')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update current user profile' })
   updateMe(
     @Req() request: AuthenticatedRequest,
     @Body() dto: UpdateProfileDto,

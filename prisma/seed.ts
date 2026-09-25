@@ -48,13 +48,13 @@ async function main() {
     update: {
       user_id: user.id,
       revoked_at: null,
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expires_at: new Date('2099-12-31T23:59:59.999Z'),
     },
     create: {
       id: randomUUID(),
       user_id: user.id,
       token_hash: tokenHash,
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expires_at: new Date('2099-12-31T23:59:59.999Z'),
     },
   });
 
@@ -83,13 +83,13 @@ async function main() {
     update: {
       user_id: organizer.id,
       revoked_at: null,
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expires_at: new Date('2099-12-31T23:59:59.999Z'),
     },
     create: {
       id: randomUUID(),
       user_id: organizer.id,
       token_hash: organizationTokenHash,
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expires_at: new Date('2099-12-31T23:59:59.999Z'),
     },
   });
 
