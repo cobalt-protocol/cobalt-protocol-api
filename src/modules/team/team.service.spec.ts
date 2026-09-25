@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { describe, beforeEach, it, expect, vi } from 'vitest';
 import { PrismaService } from '../../prisma/prisma.service.js';

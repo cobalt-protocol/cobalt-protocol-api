@@ -164,6 +164,8 @@ model Competition {
   competitionFeePaid           CompetitionFeePaid?
   participantWinners           ParticipantWinner[]
   prizeDistributeds            PrizeDistributed[]
+  certificateParticipantMinteds       CertificateParticipantMinted[]
+  certificateParticipantWinnerMinteds CertificateParticipantWinnerMinted[]
 
   @@map("competition")
 }
@@ -437,4 +439,37 @@ model IndexerState {
   updated_at         DateTime? @updatedAt
 
   @@map("indexer_state")
+}
+
+model CertificateParticipantMinted {
+  id             String    @id @default(ulid())
+  tx_hash        String
+  token_id       BigInt
+  participant    String
+  competition_id String
+  uri            String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("certificate_participant_minted")
+}
+
+model CertificateParticipantWinnerMinted {
+  id             String    @id @default(ulid())
+  tx_hash        String
+  token_id       BigInt
+  participant    String
+  competition_id String
+  winner_id      BigInt
+  uri            String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime? @updatedAt
+  deleted_at     DateTime?
+
+  competition Competition @relation(fields: [competition_id], references: [id])
+
+  @@map("certificate_participant_winner_minted")
 }
