@@ -38,6 +38,12 @@ describe('TeamService', () => {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
+    user: {
+      findFirst: vi.fn(),
+    },
+    competitionFeePaid: {
+      findFirst: vi.fn(),
+    },
     $transaction: vi.fn((cb) =>
       typeof cb === 'function' ? cb(mockPrismaService) : cb,
     ),
@@ -230,6 +236,38 @@ describe('TeamService', () => {
         include: expect.any(Object),
         orderBy: { created_at: 'desc' },
       });
+
+      expect(result).toEqual({
+        data: mockTeams,
+        message: 'All teams retrieved successfully',
+        errors: null,
+      });
+    });
+
+    it('should return all teams when competition user_id matches user wallet address', async () => {
+      const mockComp = {
+        id: 'comp-1',
+        name: 'Hackathon 2026',
+        user_id: '0x1234567890123456789012345678901234567890',
+      };
+      const mockUser = {
+        id: 'user-uuid-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      };
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Public Team',
+          visibility: true,
+          competition_id: 'comp-1',
+        },
+      ];
+
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.team.findMany.mockResolvedValue(mockTeams);
+
+      const result = await service.listAllByCompetitionId('comp-1', 'user-uuid-1');
 
       expect(result).toEqual({
         data: mockTeams,

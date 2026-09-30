@@ -156,7 +156,53 @@ export class TeamService {
       throw new NotFoundException('Competition not found');
     }
 
-    const isOwner = Boolean(competition.user_id && competition.user_id === userId);
+    let isOwner = false;
+
+    if (competition.user_id) {
+      const compUserIdLower = competition.user_id.toLowerCase();
+      const reqUserIdLower = userId.toLowerCase();
+      if (compUserIdLower === reqUserIdLower) {
+        isOwner = true;
+      }
+    }
+
+    if (!isOwner) {
+      const user = await this.prisma.user?.findFirst?.({
+        where: {
+          OR: [
+            { id: userId },
+            { wallet_address: { equals: userId, mode: 'insensitive' } },
+          ],
+        },
+      });
+
+      if (user) {
+        const dbUserIdLower = user.id.toLowerCase();
+        const dbWalletLower = user.wallet_address.toLowerCase();
+
+        if (competition.user_id) {
+          const compUserIdLower = competition.user_id.toLowerCase();
+          if (
+            compUserIdLower === dbUserIdLower ||
+            compUserIdLower === dbWalletLower
+          ) {
+            isOwner = true;
+          }
+        }
+
+        if (!isOwner) {
+          const feePaid = await this.prisma.competitionFeePaid?.findFirst?.({
+            where: {
+              competition_id: competition.id,
+              payer: { equals: user.wallet_address, mode: 'insensitive' },
+            },
+          });
+          if (feePaid) {
+            isOwner = true;
+          }
+        }
+      }
+    }
 
     if (!isOwner) {
       throw new ForbiddenException(
