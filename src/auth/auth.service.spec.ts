@@ -143,7 +143,8 @@ describe('AuthService', () => {
         include: {
           skill_description: true,
           social_media: true,
-          skill: true,
+          skills: true,
+          organizations: true,
         },
       });
       expect(mockPrismaService.organization.findFirst).toHaveBeenCalledWith({
@@ -158,6 +159,7 @@ describe('AuthService', () => {
             skill_description: null,
             social_media: null,
             skills: [],
+            organization: null,
           },
         },
         message: 'User profile retrieved successfully',

@@ -11,7 +11,7 @@ describe('ProfileService privacy', () => {
     institution: 'Campus',
     skill_description: { description: 'Builder' },
     social_media: { github_link: 'https://github.com/builder_b', linkedin_link: 'https://linkedin.com/in/builder_b' },
-    skill: { skill_name: 'Rust', level: 'ADVANCED' },
+    skills: [{ skill_name: 'Rust', level: 'ADVANCED' }],
   };
   const userUpdate = vi.fn();
   const skillDescriptionUpsert = vi.fn();
@@ -25,7 +25,7 @@ describe('ProfileService privacy', () => {
     user: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: userUpdate },
     skillDescription: { upsert: skillDescriptionUpsert },
     socialMedia: { findUnique: socialMediaFindUnique, update: socialMediaUpdate, create: socialMediaCreate },
-    skill: { upsert: skillUpsert, deleteMany: skillDeleteMany },
+    skill: { upsert: skillUpsert, deleteMany: skillDeleteMany, createMany: vi.fn() },
     $transaction: vi.fn((cb) => cb(prisma)),
   };
   const service = new ProfileService(prisma as unknown as PrismaService);

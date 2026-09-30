@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -15,6 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+
 import {
   AuthSessionGuard,
   OptionalAuthSessionGuard,
@@ -24,6 +28,7 @@ import {
 import { CreateTeamDto } from './dto/create-team.dto.js';
 import { TeamQueryDto } from './dto/team-query.dto.js';
 import { TransferLeadershipDto } from './dto/transfer-leadership.dto.js';
+import { UpdateTeamDto } from './dto/update-team.dto.js';
 import { TeamService } from './team.service.js';
 
 @ApiTags('Teams')
@@ -31,12 +36,60 @@ import { TeamService } from './team.service.js';
 export class TeamController {
   constructor(private readonly teams: TeamService) {}
 
-  @Get('public/:slug')
+  @Get('public')
   @ApiOperation({
-    summary: 'List public teams for a competition',
+    summary: 'List all public teams',
   })
-  listPublic(@Param('slug') slug: string, @Query() query: TeamQueryDto) {
-    return this.teams.listPublic(slug, query);
+  listPublic(@Query() query: TeamQueryDto) {
+    return this.teams.listPublic(query);
+  }
+
+  @Get('competition/:competitionId')
+  @ApiOperation({
+    summary: 'Get list of public teams (visibility true) by competition ID',
+  })
+  @ApiParam({
+    name: 'competitionId',
+    description: 'Competition ID (ULID or on-chain ID)',
+    type: String,
+  })
+  listPublicByCompetitionId(@Param('competitionId') competitionId: string) {
+    return this.teams.listPublicByCompetitionId(competitionId);
+  }
+
+  @Get('competition/:competitionId/all')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Get list of all teams (both public and private) by competition ID (competition owner only)',
+  })
+  @ApiParam({
+    name: 'competitionId',
+    description: 'Competition ID (ULID or on-chain ID)',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'All teams retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only competition owner can view all teams',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found or no teams found',
+  })
+  listAllByCompetitionId(
+    @Param('competitionId') competitionId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.listAllByCompetitionId(competitionId, request.userId);
   }
 
   @Get(':teamId/competition')
@@ -132,18 +185,18 @@ export class TeamController {
     return this.teams.acceptInviteByReference(inviteId, request.userId);
   }
 
-  @Post('competition/:slug')
+  @Post('competition/:id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create a team for a competition',
   })
   create(
-    @Param('slug') slug: string,
+    @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
     @Body() dto: CreateTeamDto,
   ) {
-    return this.teams.create(slug, request.userId, dto);
+    return this.teams.create(id, request.userId, dto);
   }
 
   @Post(':teamId/requests')
@@ -213,6 +266,50 @@ export class TeamController {
     return this.teams.leaveTeam(teamId, request.userId);
   }
 
+  @Delete(':teamId/members/:memberId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Remove a member from the team (leader only)',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiParam({
+    name: 'memberId',
+    description: 'User ID of member to be removed',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Member removed successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Leader cannot remove themselves',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only the team leader can remove members',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team or member not found',
+  })
+  removeMember(
+    @Param('teamId') teamId: string,
+    @Param('memberId') memberId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.removeMember(teamId, memberId, request.userId);
+  }
+
   @Post(':teamId/transfer-leadership')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
@@ -225,6 +322,78 @@ export class TeamController {
     @Body() dto: TransferLeadershipDto,
   ) {
     return this.teams.transferLeadership(teamId, request.userId, dto);
+  }
+
+  @Patch(':teamId/name')
+  @Put(':teamId/name')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update team name (leader only)',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Team name updated successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only the team leader can update team name',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team not found',
+  })
+  updateName(
+    @Param('teamId') teamId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpdateTeamDto,
+  ) {
+    return this.teams.update(teamId, request.userId, dto);
+  }
+
+  @Patch(':teamId')
+  @Put(':teamId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update team details / name (leader only)',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Team updated successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only the team leader can update team details',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team not found',
+  })
+  update(
+    @Param('teamId') teamId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpdateTeamDto,
+  ) {
+    return this.teams.update(teamId, request.userId, dto);
   }
 }
 

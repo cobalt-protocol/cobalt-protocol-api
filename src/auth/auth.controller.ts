@@ -169,6 +169,13 @@ export class AuthController {
                 deleted_at: null,
               },
             ],
+            organization: {
+              id: '01J8Z9X0000000000000000001',
+              tx_hash: '0x1234567890abcdef',
+              name: 'Cobalt Labs',
+              description: 'Web3 Security Organization',
+              user_id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
+            },
           },
         },
         message: 'User profile retrieved successfully',

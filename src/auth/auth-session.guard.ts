@@ -1,12 +1,11 @@
-import { createHash } from 'node:crypto';
 import {
   CanActivate,
   ExecutionContext,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
-import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface AuthenticatedRequest extends Request {
   userId: string;
@@ -18,7 +17,7 @@ export interface OptionalAuthenticatedRequest extends Request {
 
 @Injectable()
 export class AuthSessionGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly jwtService: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -30,32 +29,29 @@ export class AuthSessionGuard implements CanActivate {
       throw new UnauthorizedException('A valid session is required');
     }
 
-    const tokenHash = createHash('sha256').update(match[1]).digest('hex');
-    const session = await this.prisma.authSession.findUnique({
-      where: { token_hash: tokenHash },
-      include: { user: { select: { id: true, deleted_at: true } } },
-    });
-
-    if (
-      !session ||
-      session.revoked_at ||
-      session.expires_at <= new Date() ||
-      session.user.deleted_at
-    ) {
+    try {
+      const payload = await this.jwtService.verifyAsync(match[1]);
+      if (!payload?.sub) {
+        throw new UnauthorizedException('Session is invalid or expired');
+      }
+      request.userId = payload.sub;
+      return true;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Session is invalid or expired');
     }
-
-    request.userId = session.user.id;
-    return true;
   }
 }
 
 @Injectable()
 export class OptionalAuthSessionGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly jwtService: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<OptionalAuthenticatedRequest>();
+    const request =
+      context.switchToHttp().getRequest<OptionalAuthenticatedRequest>();
     const match = /^Bearer\s+(.+)$/i.exec(
       request.headers.authorization ?? '',
     );
@@ -64,19 +60,13 @@ export class OptionalAuthSessionGuard implements CanActivate {
       return true;
     }
 
-    const tokenHash = createHash('sha256').update(match[1]).digest('hex');
-    const session = await this.prisma.authSession.findUnique({
-      where: { token_hash: tokenHash },
-      include: { user: { select: { id: true, deleted_at: true } } },
-    });
-
-    if (
-      session &&
-      !session.revoked_at &&
-      session.expires_at > new Date() &&
-      !session.user.deleted_at
-    ) {
-      request.userId = session.user.id;
+    try {
+      const payload = await this.jwtService.verifyAsync(match[1]);
+      if (payload?.sub) {
+        request.userId = payload.sub;
+      }
+    } catch {
+      // Optional guard ignores invalid tokens and proceeds unauthenticated
     }
 
     return true;

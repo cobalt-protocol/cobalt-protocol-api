@@ -11,9 +11,8 @@ export class CompetitionController {
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Get list of all competitions (filtered by user if Bearer token provided)',
+    summary: 'Get list of all competitions',
   })
-  @ApiBearerAuth()
   @ApiResponse({
     status: 200,
     description: 'Competitions retrieved successfully',
@@ -59,6 +58,65 @@ export class CompetitionController {
   })
   async findAll(@Headers('authorization') authHeader?: string) {
     return this.competitionService.findAll(authHeader);
+  }
+
+  @Get('organization')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get list of competitions owned by the authenticated organization user',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({
+    status: 200,
+    description: 'Organization competitions retrieved successfully',
+    schema: {
+      example: {
+        data: [
+          {
+            id: '01J8Z9X0000000000000000001',
+            tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+            name: 'Cobalt Hackathon 2026',
+            category: 'Web3 & AI',
+            description: 'Building decentralized AI applications',
+            requirement: 'Open to all developers',
+            registration_window: '2026-10-01T00:00:00.000Z',
+            competition_window: '2026-10-15T00:00:00.000Z',
+            submission_deadline: '2026-11-01T00:00:00.000Z',
+            judging_review: '2026-11-05T00:00:00.000Z',
+            result_announcement: '2026-11-10T00:00:00.000Z',
+            pirze_certificate_claim: '2026-11-15T00:00:00.000Z',
+            certificate_cid: 'Qm123...',
+            guidebook_cid: 'Qm456...',
+            created_at: '2026-09-23T00:00:00.000Z',
+            updated_at: null,
+            deleted_at: null,
+            prize_winners: [],
+          },
+        ],
+        message: 'Organization competitions retrieved successfully',
+        errors: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - missing or invalid Bearer token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No organization competitions found',
+    schema: {
+      example: {
+        data: null,
+        message: 'No organization competitions found',
+        errors: null,
+      },
+    },
+  })
+  async findOrganizationCompetitions(
+    @Headers('authorization') authHeader: string,
+  ) {
+    return this.competitionService.findOrganizationCompetitions(authHeader);
   }
 
   @Get('listing-token-prize')
@@ -164,6 +222,17 @@ export class CompetitionController {
     status: 401,
     description: 'Unauthorized - missing or invalid Bearer token',
   })
+  @ApiResponse({
+    status: 404,
+    description: 'No teams found for the user',
+    schema: {
+      example: {
+        data: null,
+        message: 'No teams found for the user',
+        errors: null,
+      },
+    },
+  })
   async findMyTeams(@Headers('authorization') authHeader?: string) {
     return this.competitionService.findMyTeams(authHeader);
   }
@@ -172,12 +241,12 @@ export class CompetitionController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Get user team for a specific competition by competition ID, on-chain ID, or slug',
+      'Get user team for a specific competition by competition ID or on-chain ID',
   })
   @ApiBearerAuth()
   @ApiParam({
     name: 'id',
-    description: 'Competition ID (ULID, on-chain ID, or slug)',
+    description: 'Competition ID (ULID or on-chain ID)',
     type: String,
     example: '01J8Z9X0000000000000000001',
   })
@@ -199,6 +268,30 @@ export class CompetitionController {
     @Headers('authorization') authHeader?: string,
   ) {
     return this.competitionService.findMyTeamByCompetitionId(id, authHeader);
+  }
+
+  @Get(':id/teams')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Get list of teams for a specific competition by competition ID or on-chain ID (filtered by visibility: true)',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Competition ID (ULID or on-chain ID)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Teams retrieved successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found',
+  })
+  async findTeamsByCompetitionId(@Param('id') id: string) {
+    return this.competitionService.findTeamsByCompetitionId(id);
   }
 
   @Get(':id')
@@ -371,7 +464,7 @@ export class CompetitionController {
   @ApiBearerAuth()
   @ApiParam({
     name: 'id',
-    description: 'Competition ID (ULID, on-chain ID, or slug)',
+    description: 'Competition ID (ULID or on-chain ID)',
     type: String,
     example: '01J8Z9X0000000000000000001',
   })
