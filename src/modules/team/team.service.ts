@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -9,28 +10,34 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { CreateTeamDto } from './dto/create-team.dto.js';
 import { TeamQueryDto } from './dto/team-query.dto.js';
 import { TransferLeadershipDto } from './dto/transfer-leadership.dto.js';
+import { UpdateTeamDto } from './dto/update-team.dto.js';
 
 @Injectable()
 export class TeamService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listPublic(slug: string, query: TeamQueryDto) {
-    const competition = await this.prisma.competition.findFirst({
-      where: {
-        OR: [{ id: slug }, { slug }],
-        deleted_at: null,
-      },
-    });
+  async listPublic(query: TeamQueryDto) {
+    const search = query.query?.trim();
+    const competitionId = query.competition_id?.trim();
 
-    if (!competition) {
-      throw new NotFoundException('Competition not found');
+    let compIdFilter: any = undefined;
+    if (competitionId) {
+      const comp = await this.prisma.competition.findFirst({
+        where: {
+          OR: [
+            { id: competitionId },
+            { competition_id: competitionId },
+          ],
+          deleted_at: null,
+        },
+      });
+      compIdFilter = comp ? comp.id : competitionId;
     }
 
-    const search = query.query?.trim();
     const where = {
-      competition_id: competition.id,
       visibility: true,
       deleted_at: null,
+      ...(compIdFilter && { competition_id: compIdFilter }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },
@@ -47,6 +54,13 @@ export class TeamService {
         take: query.limit,
         orderBy: { created_at: 'desc' },
         include: {
+          competition: {
+            select: {
+              id: true,
+              competition_id: true,
+              name: true,
+            },
+          },
           team_roles: {
             include: {
               user: {
@@ -59,6 +73,7 @@ export class TeamService {
             },
           },
           team_codes: true,
+          skills_suggestions: true,
         },
       }),
     ]);
@@ -71,6 +86,121 @@ export class TeamService {
         limit: query.limit,
         totalPages: Math.ceil(total / query.limit),
       },
+    };
+  }
+
+  async listPublicByCompetitionId(competitionId: string) {
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [
+          { id: competitionId },
+          { competition_id: competitionId },
+        ],
+        deleted_at: null,
+      },
+    });
+
+    if (!competition) {
+      throw new NotFoundException('Competition not found');
+    }
+
+    const teams = await this.prisma.team.findMany({
+      where: {
+        competition_id: competition.id,
+        visibility: true,
+        deleted_at: null,
+      },
+      include: {
+        skills_suggestions: true,
+        team_codes: true,
+        team_roles: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                wallet_address: true,
+                institution: true,
+                location: true,
+              },
+            },
+          },
+        },
+        competition: true,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    return {
+      data: teams,
+      message: 'Teams retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async listAllByCompetitionId(competitionId: string, userId: string) {
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [
+          { id: competitionId },
+          { competition_id: competitionId },
+        ],
+        deleted_at: null,
+      },
+    });
+
+    if (!competition) {
+      throw new NotFoundException('Competition not found');
+    }
+
+    const isOwner = Boolean(competition.user_id && competition.user_id === userId);
+
+    if (!isOwner) {
+      throw new ForbiddenException(
+        'Only the competition owner can view all teams',
+      );
+    }
+
+    const teams = await this.prisma.team.findMany({
+      where: {
+        competition_id: competition.id,
+        deleted_at: null,
+      },
+      include: {
+        skills_suggestions: true,
+        team_codes: true,
+        team_roles: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                wallet_address: true,
+                institution: true,
+                location: true,
+              },
+            },
+          },
+        },
+        competition: true,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (!teams || teams.length === 0) {
+      throw new NotFoundException('No teams found for this competition');
+    }
+
+    return {
+      data: teams,
+      message: 'All teams retrieved successfully',
+      errors: null,
     };
   }
 
@@ -163,7 +293,31 @@ export class TeamService {
     const team = await this.prisma.team.findFirst({
       where: { id: teamId, deleted_at: null },
       include: {
-        competition: true,
+        competition: {
+          include: {
+            prize_winners: {
+              where: {
+                deleted_at: null,
+              },
+              include: {
+                winner: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        wallet_address: true,
+                        username: true,
+                        email: true,
+                        location: true,
+                        institution: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
         team_roles: {
           include: {
             user: {
@@ -205,13 +359,13 @@ export class TeamService {
       data: {
         competition: {
           id: team.competition.id,
-          slug: team.competition.slug,
+          competition_id: team.competition.competition_id,
           name: team.competition.name,
           title: team.competition.name,
           description: team.competition.description,
           requirement: team.competition.requirement,
           category: team.competition.category,
-          max_team_size: team.competition.max_team_size,
+          max_team_size: 5,
           registration_window: team.competition.registration_window,
           competition_window: team.competition.competition_window,
           submission_deadline: team.competition.submission_deadline,
@@ -221,6 +375,7 @@ export class TeamService {
           certificate_cid: team.competition.certificate_cid,
           created_at: team.competition.created_at,
           updated_at: team.competition.updated_at,
+          prize_winners: (team.competition as any).prize_winners ?? [],
         },
         team: {
           id: team.id,
@@ -317,10 +472,10 @@ export class TeamService {
     return this.acceptInvite(code.team.id, code.id, userId);
   }
 
-  async create(slug: string, userId: string, dto: CreateTeamDto) {
+  async create(id: string, userId: string, dto: CreateTeamDto) {
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [{ id: slug }, { slug }],
+        OR: [{ id }, { competition_id: id }],
         deleted_at: null,
       },
     });
@@ -361,7 +516,6 @@ export class TeamService {
           create: [
             {
               user_id: userId,
-              competition_id: competition.id,
               role: 'LEAD',
             },
           ],
@@ -392,20 +546,19 @@ export class TeamService {
       throw new ForbiddenException('Cannot request to join a private team');
     }
 
-    const existingRequest = await this.prisma.teamJoinRequest.findFirst({
-      where: { team_id: teamId, user_id: userId, status: 'PENDING' },
+    const existingRequest = await this.prisma.teamRole.findFirst({
+      where: { team_id: teamId, user_id: userId, deleted_at: null },
     });
 
     if (existingRequest) {
-      throw new BadRequestException('Pending join request already exists');
+      throw new ConflictException('Pending join request already exists');
     }
 
-    const request = await this.prisma.teamJoinRequest.create({
+    const request = await this.prisma.teamRole.create({
       data: {
         team_id: teamId,
         user_id: userId,
-        competition_id: team.competition_id,
-        status: 'PENDING',
+        role: 'APPLICANT',
       },
     });
 
@@ -423,14 +576,15 @@ export class TeamService {
       );
     }
 
-    const requests = await this.prisma.teamJoinRequest.findMany({
-      where: { team_id: teamId, status: 'PENDING' },
+    const requests = await this.prisma.teamRole.findMany({
+      where: { team_id: teamId, role: 'APPLICANT', deleted_at: null },
       include: {
         user: {
           select: {
             id: true,
             username: true,
             wallet_address: true,
+            skill_description: true,
           },
         },
       },
@@ -455,27 +609,22 @@ export class TeamService {
       );
     }
 
-    const joinRequest = await this.prisma.teamJoinRequest.findFirst({
-      where: { id: requestId, team_id: teamId, status: 'PENDING' },
+    const joinRequest = await this.prisma.teamRole.findFirst({
+      where: { id: requestId, team_id: teamId, role: 'APPLICANT', deleted_at: null },
     });
 
     if (!joinRequest) {
       throw new NotFoundException('Pending join request not found');
     }
 
-    await this.prisma.teamJoinRequest.update({
-      where: { id: joinRequest.id },
-      data: { status: accept ? 'ACCEPTED' : 'REJECTED' },
-    });
-
     if (accept) {
-      await this.prisma.teamRole.create({
-        data: {
-          team_id: teamId,
-          user_id: joinRequest.user_id,
-          competition_id: team.competition_id,
-          role: 'MEMBER',
-        },
+      await this.prisma.teamRole.update({
+        where: { id: joinRequest.id },
+        data: { role: 'MEMBER' },
+      });
+    } else {
+      await this.prisma.teamRole.delete({
+        where: { id: joinRequest.id },
       });
     }
 
@@ -504,6 +653,42 @@ export class TeamService {
     });
 
     return { message: 'Successfully left the team' };
+  }
+
+  async removeMember(teamId: string, memberId: string, userId: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+    });
+
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (team.user_id !== userId) {
+      throw new ForbiddenException(
+        'Only the team leader can remove members from the team',
+      );
+    }
+
+    if (memberId === userId) {
+      throw new BadRequestException(
+        'Leader cannot remove themselves from the team. Transfer leadership first or delete team',
+      );
+    }
+
+    const memberRole = await this.prisma.teamRole.findFirst({
+      where: { team_id: teamId, user_id: memberId },
+    });
+
+    if (!memberRole) {
+      throw new NotFoundException('Member not found in team');
+    }
+
+    await this.prisma.teamRole.deleteMany({
+      where: { team_id: teamId, user_id: memberId },
+    });
+
+    return { message: 'Member removed successfully' };
   }
 
   async transferLeadership(
@@ -545,5 +730,80 @@ export class TeamService {
     ]);
 
     return { message: 'Leadership transferred successfully' };
+  }
+
+  async update(teamId: string, userId: string, dto: UpdateTeamDto) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+    });
+
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (team.user_id !== userId) {
+      throw new ForbiddenException(
+        'Only the team leader can update team details',
+      );
+    }
+
+    if (dto.name !== undefined) {
+      const trimmedName = dto.name.trim();
+      if (!trimmedName) {
+        throw new BadRequestException('Team name cannot be empty');
+      }
+    }
+
+    const skills =
+      dto.skills_suggestions ?? dto.skills_suggestion ?? dto.skills;
+
+    const updatedTeam = await this.prisma.$transaction(async (tx) => {
+      if (skills !== undefined) {
+        await tx.skillsSuggestion.deleteMany({
+          where: { team_id: teamId },
+        });
+
+        if (skills.length > 0) {
+          await tx.skillsSuggestion.createMany({
+            data: skills.map((name) => ({
+              team_id: teamId,
+              name,
+            })),
+          });
+        }
+      }
+
+      return tx.team.update({
+        where: { id: teamId },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name.trim() }),
+          ...(dto.visibility !== undefined && { visibility: dto.visibility }),
+          ...(dto.description !== undefined && {
+            description: dto.description.trim(),
+          }),
+        },
+        include: {
+          skills_suggestions: true,
+          team_codes: true,
+          team_roles: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  email: true,
+                  wallet_address: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    return {
+      data: updatedTeam,
+      message: 'Team updated successfully',
+    };
   }
 }

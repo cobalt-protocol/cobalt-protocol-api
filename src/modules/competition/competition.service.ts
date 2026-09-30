@@ -17,7 +17,6 @@ export class CompetitionService {
     const search = query.query?.trim();
     const where: Prisma.CompetitionWhereInput = {
       deleted_at: null,
-      publication_status: 'PUBLISHED',
       ...(query.category && { category: query.category }),
       ...(search && { OR: [
         { name: { contains: search, mode: 'insensitive' } },
@@ -32,23 +31,72 @@ export class CompetitionService {
         include: { _count: { select: { teams: true } } },
       }),
     ]);
-    return { data: entries.map(this.present), meta: { total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) } };
+    return { data: entries.map((e) => this.present(e)), meta: { total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) } };
   }
 
-  async detail(slug: string) {
+  async detail(id: string) {
     const entry = await this.prisma.competition.findFirst({
-      where: { slug, publication_status: 'PUBLISHED', deleted_at: null },
+      where: { OR: [{ id }, { competition_id: id }], deleted_at: null },
       include: { _count: { select: { teams: true } } },
     });
     if (!entry) throw new NotFoundException('Competition not found');
     return this.present(entry);
   }
 
+  async findTeamsByCompetitionId(id: string) {
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [{ id }, { competition_id: id }],
+        deleted_at: null,
+      },
+    });
+
+    if (!competition) {
+      throw new NotFoundException('Competition not found');
+    }
+
+    const teams = await this.prisma.team.findMany({
+      where: {
+        competition_id: competition.id,
+        visibility: true,
+        deleted_at: null,
+      },
+      include: {
+        skills_suggestions: true,
+        team_codes: true,
+        team_roles: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                wallet_address: true,
+                institution: true,
+                location: true,
+              },
+            },
+          },
+        },
+        competition: true,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    return {
+      data: teams,
+      message: 'Teams retrieved successfully',
+      errors: null,
+    };
+  }
+
   private present(entry: Competition & { _count: { teams: number } }) {
     return {
-      id: entry.id, slug: entry.slug, title: entry.name, category: entry.category,
+      id: entry.id, title: entry.name, category: entry.category,
       description: entry.description, requirements: entry.requirement,
-      maxTeamSize: entry.max_team_size, registrationEndsAt: entry.registration_window,
+      maxTeamSize: 5, registrationEndsAt: entry.registration_window,
       startsAt: entry.competition_window, endsAt: entry.submission_deadline,
       teamCount: entry._count.teams, guidebookCid: entry.guidebook_cid,
     };
@@ -106,7 +154,7 @@ export class CompetitionService {
 
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [{ id }, { competition_id: id }, { slug: id }],
+        OR: [{ id }, { competition_id: id }],
         deleted_at: null,
       },
     });
@@ -156,7 +204,6 @@ export class CompetitionService {
           create: [
             {
               user_id: user.id,
-              competition_id: competition.id,
               role: 'LEAD',
             },
           ],

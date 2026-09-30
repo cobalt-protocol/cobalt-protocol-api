@@ -1,36 +1,27 @@
-import { createHash } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AuthSessionGuard } from '../../auth/auth-session.guard.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
 import { ProfileController } from './profile.controller.js';
 import { ProfileService } from './profile.service.js';
 
 describe('profile access boundaries', () => {
   let app: INestApplication;
-  const tokenA = 'A'.repeat(43);
-  const hashA = createHash('sha256').update(tokenA).digest('hex');
+  const tokenA = 'valid-jwt-token-a';
   const profiles = {
     findAll: vi.fn(),
     findPublic: vi.fn(),
     findMine: vi.fn(),
     updateMine: vi.fn(),
   };
-  const prisma = {
-    authSession: {
-      findUnique: vi
-        .fn()
-        .mockImplementation(({ where }: { where: { token_hash: string } }) =>
-          where.token_hash === hashA
-            ? {
-                expires_at: new Date(Date.now() + 60_000),
-                revoked_at: null,
-                user: { id: 'user-a', deleted_at: null },
-              }
-            : null,
-        ),
-    },
+  const mockJwtService = {
+    verifyAsync: vi.fn().mockImplementation(async (token: string) => {
+      if (token === tokenA) {
+        return { sub: 'user-a' };
+      }
+      throw new Error('Invalid token');
+    }),
   };
 
   beforeAll(async () => {
@@ -48,7 +39,7 @@ describe('profile access boundaries', () => {
       controllers: [ProfileController],
       providers: [
         AuthSessionGuard,
-        { provide: PrismaService, useValue: prisma },
+        { provide: JwtService, useValue: mockJwtService },
         { provide: ProfileService, useValue: profiles },
       ],
     }).compile();

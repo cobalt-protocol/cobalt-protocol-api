@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, SkillLevel } from '../../generated/prisma/client.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { ProfileQueryDto } from './dto/profile-query.dto.js';
 import type { ProfileSkillLevel } from './dto/profile-skill.dto.js';
@@ -16,7 +16,7 @@ const publicSelect = {
   institution: true,
   skill_description: { select: { description: true } },
   social_media: { select: { github_link: true, linkedin_link: true } },
-  skill: { select: { skill_name: true } },
+  skills: { select: { skill_name: true } },
 } satisfies Prisma.UserSelect;
 const privateSelect = {
   ...publicSelect,
@@ -44,8 +44,8 @@ function presentPublic(user: PublicProfile) {
     linkedin_link: user.social_media?.linkedin_link ?? null,
     githubLink: user.social_media?.github_link ?? null,
     linkedinLink: user.social_media?.linkedin_link ?? null,
-    skills: user.skill
-      ? [{ name: user.skill.skill_name, level: 'Proficient' as const }]
+    skills: user.skills
+      ? user.skills.map((s) => ({ name: s.skill_name, level: 'Proficient' as const }))
       : [],
   };
 }
@@ -56,13 +56,6 @@ function presentPrivate(user: PrivateProfile) {
     walletAddress: user.wallet_address,
   };
 }
-
-const _toDbLevel: Record<ProfileSkillLevel, SkillLevel> = {
-  Intermediate: SkillLevel.INTERMEDIATE,
-  Proficient: SkillLevel.PROFICIENT,
-  Advanced: SkillLevel.ADVANCED,
-  Expert: SkillLevel.EXPERT,
-};
 
 @Injectable()
 export class ProfileService {
@@ -82,8 +75,10 @@ export class ProfileService {
               { location: { contains: search, mode: 'insensitive' } },
               { institution: { contains: search, mode: 'insensitive' } },
               {
-                skill: {
-                  skill_name: { contains: search, mode: 'insensitive' },
+                skills: {
+                  some: {
+                    skill_name: { contains: search, mode: 'insensitive' },
+                  },
                 },
               },
             ],
@@ -205,14 +200,13 @@ export class ProfileService {
           const names = dto.skills
             .map((skill) => skill.name.trim())
             .filter(Boolean);
-          if (!names.length) {
-            await tx.skill.deleteMany({ where: { user_id: userId } });
-          } else {
-            const primarySkill = names[0];
-            await tx.skill.upsert({
-              where: { user_id: userId },
-              create: { user_id: userId, skill_name: primarySkill },
-              update: { skill_name: primarySkill },
+          await tx.skill.deleteMany({ where: { user_id: userId } });
+          if (names.length > 0) {
+            await tx.skill.createMany({
+              data: names.map((skill_name) => ({
+                user_id: userId,
+                skill_name,
+              })),
             });
           }
         }

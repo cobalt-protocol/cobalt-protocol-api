@@ -7,6 +7,7 @@ import { AuthService } from './auth.service.js';
 @Module({
   imports: [
     JwtModule.register({
+      global: true,
       secret: process.env.JWT_SECRET || 'cobalt-protocol-jwt-secret-key-2026',
     }),
   ],

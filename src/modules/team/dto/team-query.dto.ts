@@ -4,6 +4,13 @@ import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class TeamQueryDto {
   @ApiPropertyOptional({
+    description: 'Filter teams by competition ID (ULID or on-chain ID)',
+  })
+  @IsOptional()
+  @IsString()
+  competition_id?: string;
+
+  @ApiPropertyOptional({
     description: 'Search query for team name or description',
   })
   @IsOptional()
@@ -30,3 +37,4 @@ export class TeamQueryDto {
   @Min(1)
   limit: number = 6;
 }
+

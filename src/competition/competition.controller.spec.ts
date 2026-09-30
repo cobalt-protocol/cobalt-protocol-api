@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { CompetitionController } from './competition.controller.js';
 import { CompetitionService } from './competition.service.js';
 
@@ -38,6 +38,7 @@ describe('CompetitionController', () => {
     findListingTokenPrizes: vi.fn(),
     findMyTeams: vi.fn(),
     findMyTeamByCompetitionId: vi.fn(),
+    findTeamsByCompetitionId: vi.fn(),
     findOne: vi.fn(),
     findPrizeWinners: vi.fn(),
     getTokenPrizeByCompetitionId: vi.fn(),
@@ -62,7 +63,16 @@ describe('CompetitionController', () => {
   });
 
   describe('findAll', () => {
-    it('should return list of competitions', async () => {
+    it('should return list of competitions without auth header', async () => {
+      mockCompetitionService.findAll.mockResolvedValue(mockCompetitionResponse);
+
+      const result = await controller.findAll();
+
+      expect(mockCompetitionService.findAll).toHaveBeenCalledWith(undefined);
+      expect(result).toEqual(mockCompetitionResponse);
+    });
+
+    it('should return list of competitions with auth header', async () => {
       mockCompetitionService.findAll.mockResolvedValue(mockCompetitionResponse);
 
       const result = await controller.findAll('Bearer sample-token');
@@ -76,7 +86,31 @@ describe('CompetitionController', () => {
         new NotFoundException('No competitions found'),
       );
 
-      await expect(controller.findAll()).rejects.toThrow(NotFoundException);
+      await expect(controller.findAll('Bearer sample-token')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findOrganizationCompetitions', () => {
+    it('should return organization competitions when given valid auth header', async () => {
+      const mockOrgResponse = {
+        data: mockCompetitionResponse.data,
+        message: 'Organization competitions retrieved successfully',
+        errors: null,
+      };
+      mockCompetitionService.findOrganizationCompetitions = vi.fn().mockResolvedValue(mockOrgResponse);
+
+      const result = await controller.findOrganizationCompetitions('Bearer valid-token');
+
+      expect(mockCompetitionService.findOrganizationCompetitions).toHaveBeenCalledWith('Bearer valid-token');
+      expect(result).toEqual(mockOrgResponse);
+    });
+
+    it('should throw UnauthorizedException when auth header is missing or invalid', async () => {
+      mockCompetitionService.findOrganizationCompetitions = vi.fn().mockRejectedValue(
+        new UnauthorizedException('Missing authorization header'),
+      );
+
+      await expect(controller.findOrganizationCompetitions('')).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -223,6 +257,16 @@ describe('CompetitionController', () => {
       expect(mockCompetitionService.findMyTeams).toHaveBeenCalledWith('Bearer valid-token');
       expect(result).toEqual(mockTeamsResponse);
     });
+
+    it('should throw NotFoundException if service throws NotFoundException when no teams found', async () => {
+      mockCompetitionService.findMyTeams.mockRejectedValue(
+        new NotFoundException('No teams found for the user'),
+      );
+
+      await expect(controller.findMyTeams('Bearer valid-token')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 
   describe('findMyTeamByCompetitionId', () => {
@@ -247,6 +291,29 @@ describe('CompetitionController', () => {
         'Bearer valid-token',
       );
       expect(result).toEqual(mockTeamResponse);
+    });
+  });
+
+  describe('findTeamsByCompetitionId', () => {
+    it('should return public teams for a competition', async () => {
+      const mockTeamsResponse = {
+        data: [
+          {
+            id: 'team-1',
+            name: 'Public Team 1',
+            visibility: true,
+            competition_id: 'comp-1',
+          },
+        ],
+        message: 'Teams retrieved successfully',
+        errors: null,
+      };
+      mockCompetitionService.findTeamsByCompetitionId.mockResolvedValue(mockTeamsResponse);
+
+      const result = await controller.findTeamsByCompetitionId('comp-1');
+
+      expect(mockCompetitionService.findTeamsByCompetitionId).toHaveBeenCalledWith('comp-1');
+      expect(result).toEqual(mockTeamsResponse);
     });
   });
 

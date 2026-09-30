@@ -18,8 +18,31 @@ export class CompetitionController {
     return this.competitions.list(query);
   }
 
-  @Get(':slug') detail(@Param('slug') slug: string) {
-    return this.competitions.detail(slug);
+  @Get(':id/teams')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get list of teams for a specific competition by competition ID or on-chain ID (filtered by visibility: true)',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Competition ID (ULID or on-chain ID)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Teams retrieved successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found',
+  })
+  async findTeamsByCompetitionId(@Param('id') id: string) {
+    return this.competitions.findTeamsByCompetitionId(id);
+  }
+
+  @Get(':id') detail(@Param('id') id: string) {
+    return this.competitions.detail(id);
   }
 
   @Post(':id/teams')
@@ -30,7 +53,7 @@ export class CompetitionController {
   @ApiBearerAuth()
   @ApiParam({
     name: 'id',
-    description: 'Competition ID (ULID, on-chain ID, or slug)',
+    description: 'Competition ID (ULID or on-chain ID)',
     type: String,
     example: '01J8Z9X0000000000000000001',
   })

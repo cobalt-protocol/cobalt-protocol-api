@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CompetitionService } from './competition.service.js';
@@ -45,9 +45,15 @@ describe('CompetitionService', () => {
     user: {
       findFirst: vi.fn(),
     },
+    organization: {
+      findMany: vi.fn(),
+    },
     team: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    teamRole: {
       findFirst: vi.fn(),
     },
   };
@@ -58,6 +64,7 @@ describe('CompetitionService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -123,9 +130,58 @@ describe('CompetitionService', () => {
     });
 
     it('should throw NotFoundException when no competitions found', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-123' });
+      mockPrismaService.user.findFirst.mockResolvedValue(null);
       mockPrismaService.competition.findMany.mockResolvedValue([]);
 
-      await expect(service.findAll()).rejects.toThrow(NotFoundException);
+      await expect(service.findAll('Bearer valid-token')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findOrganizationCompetitions', () => {
+    it('should throw UnauthorizedException when no auth header is provided', async () => {
+      await expect(service.findOrganizationCompetitions('')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when auth header format is invalid', async () => {
+      await expect(service.findOrganizationCompetitions('InvalidHeader')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when token is invalid or expired', async () => {
+      mockJwtService.verifyAsync.mockRejectedValue(new Error('Jwt expired'));
+
+      await expect(service.findOrganizationCompetitions('Bearer invalid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should return organization competitions when valid token provided', async () => {
+      const mockUser = { id: 'user-123', wallet_address: '0x123' };
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-123' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findMany.mockResolvedValue([mockCompetition]);
+
+      const result = await service.findOrganizationCompetitions('Bearer valid-token');
+
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith('valid-token');
+      expect(mockPrismaService.user.findFirst).toHaveBeenCalled();
+      expect(mockPrismaService.competition.findMany).toHaveBeenCalled();
+      expect(result).toEqual({
+        data: [mockCompetition],
+        message: 'Organization competitions retrieved successfully',
+        errors: null,
+      });
+    });
+
+    it('should throw NotFoundException when no organization competitions found', async () => {
+      const mockUser = { id: 'user-123', wallet_address: '0x123' };
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-123' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findMany.mockResolvedValue([]);
+
+      await expect(service.findOrganizationCompetitions('Bearer valid-token')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -362,6 +418,18 @@ describe('CompetitionService', () => {
         errors: null,
       });
     });
+
+    it('should throw NotFoundException when no teams are found for the user', async () => {
+      const mockUser = { id: 'user-1', wallet_address: '0x123' };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.team.findMany.mockResolvedValue([]);
+
+      await expect(service.findMyTeams('Bearer valid-token')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 
   describe('findMyTeamByCompetitionId', () => {
@@ -383,7 +451,7 @@ describe('CompetitionService', () => {
 
     it('should return user team for competition when found', async () => {
       const mockUser = { id: 'user-1', wallet_address: '0x123' };
-      const mockCompetition = { id: 'comp-1', slug: 'comp-1' };
+      const mockCompetition = { id: 'comp-1', competition_id: 'comp-1' };
       const mockTeam = {
         id: 'team-1',
         name: 'Cyber Warriors',
@@ -401,6 +469,57 @@ describe('CompetitionService', () => {
       expect(result).toEqual({
         data: mockTeam,
         message: 'Team retrieved successfully',
+        errors: null,
+      });
+    });
+  });
+
+  describe('findTeamsByCompetitionId', () => {
+    it('should throw NotFoundException if competition is not found', async () => {
+      mockPrismaService.competition.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.findTeamsByCompetitionId('non-existent-comp'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return list of teams filtered by visibility true', async () => {
+      const mockComp = { id: 'comp-1', name: 'Hackathon 2026' };
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Public Team 1',
+          visibility: true,
+          competition_id: 'comp-1',
+          user_id: 'user-1',
+        },
+      ];
+
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.team.findMany.mockResolvedValue(mockTeams);
+
+      const result = await service.findTeamsByCompetitionId('comp-1');
+
+      expect(mockPrismaService.competition.findFirst).toHaveBeenCalledWith({
+        where: {
+          OR: [{ id: 'comp-1' }, { competition_id: 'comp-1' }],
+          deleted_at: null,
+        },
+      });
+
+      expect(mockPrismaService.team.findMany).toHaveBeenCalledWith({
+        where: {
+          competition_id: 'comp-1',
+          visibility: true,
+          deleted_at: null,
+        },
+        include: expect.any(Object),
+        orderBy: { created_at: 'desc' },
+      });
+
+      expect(result).toEqual({
+        data: mockTeams,
+        message: 'Teams retrieved successfully',
         errors: null,
       });
     });
@@ -435,6 +554,17 @@ describe('CompetitionService', () => {
       await expect(
         service.createTeam('invalid-comp', 'Bearer valid-token', { visibility: true, description: 'desc' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException when user is already part of a team in this competition', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue({ id: 'user-1' });
+      mockPrismaService.competition.findFirst.mockResolvedValue({ id: 'comp-1' });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue({ id: 'tr-1', role: 'LEAD', user_id: 'user-1', team_id: 'team-1' });
+
+      await expect(
+        service.createTeam('comp-1', 'Bearer valid-token', { visibility: true, description: 'desc' }),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should successfully create a team with code and skill suggestions', async () => {

@@ -1,5 +1,6 @@
 import { PrismaPg } from '@prisma/adapter-pg';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 
 const adapter = new PrismaPg({
@@ -10,22 +11,11 @@ const prisma = new PrismaClient({
   errorFormat: 'pretty',
   adapter: adapter,
 });
-const accessToken = 'dummy-user-access-token-for-testing-123456789';
-const organizationToken =
-  'dummy-organization-access-token-for-testing-123456789';
-
-for (const token of [accessToken, organizationToken]) {
-  if (!/^[A-Za-z0-9_-]{43,128}$/.test(token)) {
-    throw new Error('Dummy access tokens must satisfy AuthSessionGuard format');
-  }
-}
+const jwtService = new JwtService({
+  secret: process.env.JWT_SECRET || 'cobalt-protocol-jwt-secret-key-2026',
+});
 
 async function main() {
-  const tokenHash = createHash('sha256').update(accessToken).digest('hex');
-  const organizationTokenHash = createHash('sha256')
-    .update(organizationToken)
-    .digest('hex');
-
   const user = await prisma.user.upsert({
     where: {
       wallet_address: '0x0000000000000000000000000000000000000001',
@@ -41,21 +31,9 @@ async function main() {
     },
   });
 
-  await prisma.authSession.upsert({
-    where: {
-      token_hash: tokenHash,
-    },
-    update: {
-      user_id: user.id,
-      revoked_at: null,
-      expires_at: new Date('2099-12-31T23:59:59.999Z'),
-    },
-    create: {
-      id: randomUUID(),
-      user_id: user.id,
-      token_hash: tokenHash,
-      expires_at: new Date('2099-12-31T23:59:59.999Z'),
-    },
+  const accessToken = jwtService.sign({
+    sub: user.id,
+    wallet_address: user.wallet_address,
   });
 
   console.log('Dummy user:', user.id);
@@ -76,21 +54,9 @@ async function main() {
     },
   });
 
-  await prisma.authSession.upsert({
-    where: {
-      token_hash: organizationTokenHash,
-    },
-    update: {
-      user_id: organizer.id,
-      revoked_at: null,
-      expires_at: new Date('2099-12-31T23:59:59.999Z'),
-    },
-    create: {
-      id: randomUUID(),
-      user_id: organizer.id,
-      token_hash: organizationTokenHash,
-      expires_at: new Date('2099-12-31T23:59:59.999Z'),
-    },
+  const organizationToken = jwtService.sign({
+    sub: organizer.id,
+    wallet_address: organizer.wallet_address,
   });
 
   const organization = await prisma.organization.upsert({

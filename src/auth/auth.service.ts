@@ -5,13 +5,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { verifyMessage } from 'viem';
 import {
   User,
   SkillDescription,
   SocialMedia,
   Skill,
+  Organization,
 } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { generateUlid } from '../common/utils/ulid.util.js';
@@ -26,6 +27,7 @@ export type UserWithRole = User & {
   social_media?: SocialMedia | null;
   skill?: Skill | null;
   skills?: Skill[];
+  organization?: Organization | null;
 };
 
 export interface NonceData {
@@ -293,6 +295,16 @@ export class AuthService {
     };
 
     const role = await this.getUserRole(activeUser.id);
+    let organization: Organization | null = null;
+    if (activeUser.id) {
+      try {
+        organization = await this.prisma.organization.findFirst({
+          where: { user_id: activeUser.id },
+        });
+      } catch {
+        // ignore
+      }
+    }
 
     const payload = {
       sub: activeUser.id,
@@ -300,34 +312,13 @@ export class AuthService {
     };
     const token = this.jwtService.sign(payload);
 
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-    const expiresAt = new Date('2099-12-31T23:59:59.999Z');
-
-    try {
-      await this.prisma.authSession.upsert({
-        where: { token_hash: tokenHash },
-        create: {
-          id: generateUlid(),
-          user_id: activeUser.id,
-          token_hash: tokenHash,
-          expires_at: expiresAt,
-        },
-        update: {
-          user_id: activeUser.id,
-          expires_at: expiresAt,
-          revoked_at: null,
-        },
-      });
-    } catch (dbError) {
-      this.logger.warn(`Could not persist auth session: ${dbError}`);
-    }
-
     return {
       data: {
         token,
         user: {
           ...activeUser,
           role,
+          organization,
         },
       },
       message: 'Signature verified successfully',
@@ -363,7 +354,8 @@ export class AuthService {
           include: {
             skill_description: true,
             social_media: true,
-            skill: true,
+            skills: true,
+            organizations: true,
           },
         });
       }
@@ -378,7 +370,8 @@ export class AuthService {
           include: {
             skill_description: true,
             social_media: true,
-            skill: true,
+            skills: true,
+            organizations: true,
           },
         });
       }
@@ -391,15 +384,18 @@ export class AuthService {
     }
 
     const role = await this.getUserRole(user.id);
+    const { organizations, ...userWithoutOrganizations } = user;
+    const organization = organizations && organizations.length > 0 ? organizations[0] : null;
 
     return {
       data: {
         user: {
-          ...user,
+          ...userWithoutOrganizations,
           role,
           skill_description: user.skill_description ?? null,
           social_media: user.social_media ?? null,
-          skills: user.skills ?? (user.skill ? [user.skill] : []),
+          skills: user.skills ?? [],
+          organization,
         },
       },
       message: 'User profile retrieved successfully',

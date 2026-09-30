@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -6,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'node:crypto';
+import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateCompetitionTeamDto } from './dto/create-team.dto.js';
 
@@ -156,7 +158,7 @@ export class CompetitionService {
           },
         },
         {
-          nonceCertificateParticipants: {
+          nonce_certificate_participant: {
             some: {
               OR: [
                 ...(userId ? [{ user_id: userId }] : []),
@@ -177,7 +179,7 @@ export class CompetitionService {
           },
         },
         {
-          nonceCertificateWinners: {
+          nonce_certificate_winner: {
             some: {
               OR: [
                 ...(userId ? [{ user_id: userId }] : []),
@@ -221,6 +223,93 @@ export class CompetitionService {
     return {
       data: competitions,
       message: 'Competitions retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async findOrganizationCompetitions(authHeader: string) {
+    if (!authHeader) {
+      throw new UnauthorizedException('Missing authorization header');
+    }
+
+    const [type, token] = authHeader.split(' ');
+    if (type !== 'Bearer' || !token) {
+      throw new UnauthorizedException('Invalid authorization header format');
+    }
+
+    let userId: string | null = null;
+    let walletAddress: string | null = null;
+
+    try {
+      const payload = await this.jwtService.verifyAsync(token);
+      userId = payload.sub ?? null;
+      walletAddress = payload.wallet_address ?? null;
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    if (!userId && !walletAddress) {
+      throw new UnauthorizedException('Invalid token payload');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(userId ? [{ id: userId }] : []),
+          ...(walletAddress
+            ? [
+                {
+                  wallet_address: {
+                    equals: walletAddress,
+                    mode: 'insensitive' as const,
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const userConditions: any[] = [{ user_id: user.id }];
+    if (user.wallet_address) {
+      userConditions.push({
+        user: {
+          wallet_address: {
+            equals: user.wallet_address,
+            mode: 'insensitive',
+          },
+        },
+      });
+    }
+
+    const competitions = await this.prisma.competition.findMany({
+      where: {
+        OR: userConditions,
+        deleted_at: null,
+      },
+      include: {
+        prize_winners: {
+          where: {
+            deleted_at: null,
+          },
+        },
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (!competitions || competitions.length === 0) {
+      throw new NotFoundException('No organization competitions found');
+    }
+
+    return {
+      data: competitions,
+      message: 'Organization competitions retrieved successfully',
       errors: null,
     };
   }
@@ -330,6 +419,10 @@ export class CompetitionService {
       },
     });
 
+    if (!teams || teams.length === 0) {
+      throw new NotFoundException('No teams found for the user');
+    }
+
     return {
       data: teams,
       message: 'Teams retrieved successfully',
@@ -385,7 +478,7 @@ export class CompetitionService {
 
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [{ id }, { competition_id: id }, { slug: id }],
+        OR: [{ id }, { competition_id: id }],
         deleted_at: null,
       },
     });
@@ -435,6 +528,55 @@ export class CompetitionService {
       message: team
         ? 'Team retrieved successfully'
         : 'No team found for this competition',
+      errors: null,
+    };
+  }
+
+  async findTeamsByCompetitionId(id: string) {
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [{ id }, { competition_id: id }],
+        deleted_at: null,
+      },
+    });
+
+    if (!competition) {
+      throw new NotFoundException('Competition not found');
+    }
+
+    const teams = await this.prisma.team.findMany({
+      where: {
+        competition_id: competition.id,
+        visibility: true,
+        deleted_at: null,
+      },
+      include: {
+        skills_suggestions: true,
+        team_codes: true,
+        team_roles: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                wallet_address: true,
+                institution: true,
+                location: true,
+              },
+            },
+          },
+        },
+        competition: true,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    return {
+      data: teams,
+      message: 'Teams retrieved successfully',
       errors: null,
     };
   }
@@ -622,13 +764,29 @@ export class CompetitionService {
 
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [{ id }, { competition_id: id }, { slug: id }],
+        OR: [{ id }, { competition_id: id }],
         deleted_at: null,
       },
     });
 
     if (!competition) {
       throw new NotFoundException('Competition not found');
+    }
+
+    const existingRole = await this.prisma.teamRole.findFirst({
+      where: {
+        user_id: user.id,
+        team: {
+          competition_id: competition.id,
+        },
+        deleted_at: null,
+      },
+    });
+
+    if (existingRole) {
+      throw new ConflictException(
+        'You are already registered in a team for this competition',
+      );
     }
 
     const isPublic = Boolean(dto.visibility);
@@ -644,64 +802,75 @@ export class CompetitionService {
         ? dto.name.trim()
         : `Team ${randomBytes(3).toString('hex').toUpperCase()}`;
 
-    const team = await this.prisma.team.create({
-      data: {
-        name: teamName,
-        visibility: isPublic,
-        description: dto.description ? dto.description.trim() : '',
-        competition_id: competition.id,
-        user_id: user.id,
-        skills_suggestions: {
-          create: skillsList
-            .map((s) => (typeof s === 'string' ? s.trim() : ''))
-            .filter((name) => name.length > 0)
-            .map((name) => ({ name })),
-        },
-        ...(isPublic && teamCodeStr
-          ? {
-              team_codes: {
-                create: [
-                  {
-                    code: teamCodeStr,
-                  },
-                ],
+    try {
+      const team = await this.prisma.team.create({
+        data: {
+          name: teamName,
+          visibility: isPublic,
+          description: dto.description ? dto.description.trim() : '',
+          competition_id: competition.id,
+          user_id: user.id,
+          skills_suggestions: {
+            create: skillsList
+              .map((s) => (typeof s === 'string' ? s.trim() : ''))
+              .filter((name) => name.length > 0)
+              .map((name) => ({ name })),
+          },
+          ...(isPublic && teamCodeStr
+            ? {
+                team_codes: {
+                  create: [
+                    {
+                      code: teamCodeStr,
+                    },
+                  ],
+                },
+              }
+            : {}),
+          team_roles: {
+            create: [
+              {
+                user_id: user.id,
+                role: 'LEAD',
               },
-            }
-          : {}),
-        team_roles: {
-          create: [
-            {
-              user_id: user.id,
-              competition_id: competition.id,
-              role: 'LEAD',
-            },
-          ],
+            ],
+          },
         },
-      },
-      include: {
-        skills_suggestions: true,
-        team_codes: true,
-        team_roles: true,
-      },
-    });
+        include: {
+          skills_suggestions: true,
+          team_codes: true,
+          team_roles: true,
+        },
+      });
 
-    return {
-      data: {
-        id: team.id,
-        name: team.name,
-        visibility: team.visibility,
-        description: team.description,
-        competition_id: team.competition_id,
-        user_id: team.user_id,
-        team_code: teamCodeStr,
-        team_codes: team.team_codes,
-        skills_suggestions: team.skills_suggestions,
-        created_at: team.created_at,
-        updated_at: team.updated_at,
-      },
-      message: 'Team created successfully',
-      errors: null,
-    };
+      return {
+        data: {
+          id: team.id,
+          name: team.name,
+          visibility: team.visibility,
+          description: team.description,
+          competition_id: team.competition_id,
+          user_id: team.user_id,
+          team_code: teamCodeStr,
+          team_codes: team.team_codes,
+          skills_suggestions: team.skills_suggestions,
+          created_at: team.created_at,
+          updated_at: team.updated_at,
+        },
+        message: 'Team created successfully',
+        errors: null,
+      };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'You are already registered in a team for this competition',
+        );
+      }
+      throw error;
+    }
   }
 }
 
