@@ -34,6 +34,13 @@ describe('TeamService', () => {
       delete: vi.fn(),
       create: vi.fn(),
     },
+    requestJoin: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
     skillsSuggestion: {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
@@ -372,77 +379,6 @@ describe('TeamService', () => {
     });
   });
 
-  describe('requestJoin', () => {
-    it('should throw NotFoundException if team does not exist', async () => {
-      mockPrismaService.team.findFirst.mockResolvedValue(null);
-
-      await expect(service.requestJoin('non-existent', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should throw ForbiddenException if team is private', async () => {
-      mockPrismaService.team.findFirst.mockResolvedValue({
-        id: 'team-1',
-        visibility: false,
-      });
-
-      await expect(service.requestJoin('team-1', 'user-1')).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('should throw ConflictException if join request already exists', async () => {
-      mockPrismaService.team.findFirst.mockResolvedValue({
-        id: 'team-1',
-        visibility: true,
-        competition_id: 'comp-1',
-      });
-      mockPrismaService.teamRole.findFirst.mockResolvedValue({
-        id: 'req-1',
-        team_id: 'team-1',
-        user_id: 'user-1',
-        role: 'APPLICANT',
-      });
-
-      await expect(service.requestJoin('team-1', 'user-1')).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it('should create join request if valid and no pending request exists', async () => {
-      const mockTeam = {
-        id: 'team-1',
-        visibility: true,
-        competition_id: 'comp-1',
-      };
-      const mockCreatedRequest = {
-        id: 'req-1',
-        team_id: 'team-1',
-        user_id: 'user-1',
-        role: 'APPLICANT',
-      };
-
-      mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
-      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
-      mockPrismaService.teamRole.create.mockResolvedValue(mockCreatedRequest);
-
-      const result = await service.requestJoin('team-1', 'user-1');
-
-      expect(mockPrismaService.teamRole.create).toHaveBeenCalledWith({
-        data: {
-          team_id: 'team-1',
-          user_id: 'user-1',
-          role: 'APPLICANT',
-        },
-      });
-      expect(result).toEqual({
-        data: mockCreatedRequest,
-        message: 'Join request sent',
-      });
-    });
-  });
-
   describe('update', () => {
     it('should throw NotFoundException if team does not exist', async () => {
       mockPrismaService.team.findFirst.mockResolvedValue(null);
@@ -571,6 +507,441 @@ describe('TeamService', () => {
         where: { team_id: 'team-1', user_id: 'member-1' },
       });
       expect(result).toEqual({ message: 'Member removed successfully' });
+    });
+  });
+
+    describe('members', () => {
+    it('should return team members when user is a team member', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        name: 'Team 1',
+        visibility: true,
+        user_id: 'owner-1',
+        team_roles: [
+          {
+            id: 'role-1',
+            role: 'LEAD',
+            user_id: 'owner-1',
+            user: { id: 'owner-1', username: 'owner', wallet_address: '0x1' },
+          },
+        ],
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue(null);
+
+      const result = await service.members('team-1', 'owner-1');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].user.username).toBe('owner');
+    });
+
+    it('should throw ForbiddenException if user has a pending join request', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        name: 'Team 1',
+        visibility: true,
+        user_id: 'owner-1',
+        team_roles: [],
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+        deleted_at: null,
+      });
+
+      await expect(service.members('team-1', 'user-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should throw NotFoundException if team does not exist', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue(null);
+
+      await expect(service.members('non-existent', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw NotFoundException when user is not a member of the team and not competition owner', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        name: 'Team 1',
+        visibility: false,
+        user_id: 'owner-1',
+        team_roles: [],
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue(null);
+
+      await expect(service.members('team-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return team members when user is the competition owner even if not a team member', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        name: 'Team 1',
+        visibility: true,
+        user_id: 'member-1',
+        competition: {
+          id: 'comp-1',
+          user_id: 'comp-owner-id',
+        },
+        team_roles: [
+          {
+            id: 'role-1',
+            role: 'LEAD',
+            user_id: 'member-1',
+            user: { id: 'member-1', username: 'member', wallet_address: '0x2' },
+          },
+        ],
+      });
+
+      const result = await service.members('team-1', 'comp-owner-id');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].user.username).toBe('member');
+    });
+
+    it('should return team members when user is competition owner even if join request is pending', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        name: 'Team 1',
+        visibility: true,
+        user_id: 'member-1',
+        competition: {
+          id: 'comp-1',
+          user_id: 'comp-owner-id',
+        },
+        team_roles: [
+          {
+            id: 'role-1',
+            role: 'LEAD',
+            user_id: 'member-1',
+            user: { id: 'member-1', username: 'member', wallet_address: '0x2' },
+          },
+        ],
+      });
+
+      const result = await service.members('team-1', 'comp-owner-id');
+      expect(result.data).toHaveLength(1);
+    });
+  });
+
+  describe('requestJoin', () => {
+    it('should throw NotFoundException if team does not exist', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.requestJoin('non-existent', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException if user is already a member', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({ id: 'team-1' });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue({
+        id: 'role-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+      });
+
+      await expect(service.requestJoin('team-1', 'user-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw ConflictException if user already has a pending join request', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({ id: 'team-1' });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.requestJoin.findUnique.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+        deleted_at: null,
+      });
+
+      await expect(service.requestJoin('team-1', 'user-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should create a new join request successfully', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({ id: 'team-1' });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.requestJoin.findUnique.mockResolvedValue(null);
+      const mockCreatedReq = {
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+      };
+      mockPrismaService.requestJoin.create.mockResolvedValue(mockCreatedReq);
+
+      const result = await service.requestJoin('team-1', 'user-1');
+
+      expect(mockPrismaService.requestJoin.create).toHaveBeenCalledWith({
+        data: {
+          team_id: 'team-1',
+          user_id: 'user-1',
+          status: 'pending',
+        },
+      });
+      expect(result).toEqual({
+        data: mockCreatedReq,
+        message: 'Join request submitted successfully',
+        errors: null,
+      });
+    });
+
+    it('should update a previously rejected request back to pending', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({ id: 'team-1' });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.requestJoin.findUnique.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'rejected',
+      });
+      const mockUpdatedReq = {
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+      };
+      mockPrismaService.requestJoin.update.mockResolvedValue(mockUpdatedReq);
+
+      const result = await service.requestJoin('team-1', 'user-1');
+
+      expect(mockPrismaService.requestJoin.update).toHaveBeenCalledWith({
+        where: {
+          team_id_user_id: { team_id: 'team-1', user_id: 'user-1' },
+        },
+        data: { status: 'pending', deleted_at: null },
+      });
+      expect(result).toEqual({
+        data: mockUpdatedReq,
+        message: 'Join request submitted successfully',
+        errors: null,
+      });
+    });
+  });
+  describe('listRequestJoins', () => {
+    it('should throw NotFoundException if team does not exist', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.listRequestJoins('non-existent', 'leader-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException if user is not the team leader', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+
+      await expect(
+        service.listRequestJoins('team-1', 'other-user'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should return join requests list for team leader', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+      const mockRequests = [
+        {
+          id: 'req-1',
+          team_id: 'team-1',
+          user_id: 'user-1',
+          status: 'pending',
+          user: { id: 'user-1', username: 'john' },
+        },
+      ];
+      mockPrismaService.requestJoin.findMany.mockResolvedValue(mockRequests);
+
+      const result = await service.listRequestJoins('team-1', 'leader-id');
+
+      expect(mockPrismaService.requestJoin.findMany).toHaveBeenCalledWith({
+        where: { team_id: 'team-1', deleted_at: null },
+        include: expect.any(Object),
+        orderBy: { created_at: 'desc' },
+      });
+      expect(result).toEqual({
+        data: mockRequests,
+        message: 'Join requests retrieved successfully',
+        errors: null,
+      });
+    });
+  });
+
+  describe('acceptRequestJoin', () => {
+    it('should throw NotFoundException if team does not exist', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.acceptRequestJoin('non-existent', 'req-1', 'leader-id'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException if user is not team leader', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+
+      await expect(
+        service.acceptRequestJoin('team-1', 'req-1', 'other-user'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException if join request does not exist', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.acceptRequestJoin('team-1', 'req-1', 'leader-id'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if join request status is not pending', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'accepted',
+      });
+
+      await expect(
+        service.acceptRequestJoin('team-1', 'req-1', 'leader-id'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if requested user is already a team member', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue({
+        id: 'role-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+      });
+
+      await expect(
+        service.acceptRequestJoin('team-1', 'req-1', 'leader-id'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should accept join request and create team member role successfully', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      const mockUpdatedReq = {
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'accepted',
+      };
+      const mockCreatedRole = {
+        id: 'role-2',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        role: 'MEMBER',
+      };
+      mockPrismaService.requestJoin.update.mockResolvedValue(mockUpdatedReq);
+      mockPrismaService.teamRole.create.mockResolvedValue(mockCreatedRole);
+
+      const result = await service.acceptRequestJoin(
+        'team-1',
+        'req-1',
+        'leader-id',
+      );
+
+      expect(result).toEqual({
+        data: { request: mockUpdatedReq, role: mockCreatedRole },
+        message: 'Join request accepted successfully',
+        errors: null,
+      });
+    });
+  });
+
+  describe('rejectRequestJoin', () => {
+    it('should throw NotFoundException if team does not exist', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.rejectRequestJoin('non-existent', 'req-1', 'leader-id'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException if user is not team leader', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+
+      await expect(
+        service.rejectRequestJoin('team-1', 'req-1', 'other-user'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should reject join request successfully', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+      });
+      const mockRejectedReq = {
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'rejected',
+      };
+      mockPrismaService.requestJoin.update.mockResolvedValue(mockRejectedReq);
+
+      const result = await service.rejectRequestJoin(
+        'team-1',
+        'req-1',
+        'leader-id',
+      );
+
+      expect(mockPrismaService.requestJoin.update).toHaveBeenCalledWith({
+        where: { id: 'req-1' },
+        data: { status: 'rejected' },
+      });
+      expect(result).toEqual({
+        data: mockRejectedReq,
+        message: 'Join request rejected successfully',
+        errors: null,
+      });
     });
   });
 });

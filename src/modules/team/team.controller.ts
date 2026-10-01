@@ -1,13 +1,10 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
   Post,
-  Put,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -25,9 +22,6 @@ import {
   type AuthenticatedRequest,
   type OptionalAuthenticatedRequest,
 } from '../../auth/auth-session.guard.js';
-import { CreateTeamDto } from './dto/create-team.dto.js';
-import { TeamQueryDto } from './dto/team-query.dto.js';
-import { TransferLeadershipDto } from './dto/transfer-leadership.dto.js';
 import { UpdateTeamDto } from './dto/update-team.dto.js';
 import { TeamService } from './team.service.js';
 
@@ -35,14 +29,6 @@ import { TeamService } from './team.service.js';
 @Controller('teams')
 export class TeamController {
   constructor(private readonly teams: TeamService) {}
-
-  @Get('public')
-  @ApiOperation({
-    summary: 'List all public teams',
-  })
-  listPublic(@Query() query: TeamQueryDto) {
-    return this.teams.listPublic(query);
-  }
 
   @Get('competition/:competitionId')
   @ApiOperation({
@@ -116,11 +102,46 @@ export class TeamController {
     status: 404,
     description: 'Team or competition not found (or private team access restricted)',
   })
-  async getCompetitionByTeamId(
+    async getCompetitionByTeamId(
     @Param('teamId') teamId: string,
     @Req() request: OptionalAuthenticatedRequest,
   ) {
     return this.teams.getCompetitionByTeamId(teamId, request.userId);
+  }
+
+  @Get(':teamId/members')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get list of team members by Team ID',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Team members retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden - your join request is still pending or private team access is restricted',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team not found',
+  })
+  async getMembers(
+    @Param('teamId') teamId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.members(teamId, request.userId);
   }
 
   @Get(':teamId')
@@ -132,30 +153,6 @@ export class TeamController {
     @Req() request?: AuthenticatedRequest,
   ) {
     return this.teams.detail(teamId, request?.userId);
-  }
-
-  @Get(':teamId/members')
-  @ApiOperation({
-    summary: 'Get team members list',
-  })
-  members(
-    @Param('teamId') teamId: string,
-    @Req() request?: AuthenticatedRequest,
-  ) {
-    return this.teams.members(teamId, request?.userId);
-  }
-
-  @Post(':teamId/invites')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Generate an invite code for team (leader only)',
-  })
-  createInvite(
-    @Param('teamId') teamId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.createInvite(teamId, request.userId);
   }
 
   @Post(':teamId/invites/:inviteId/accept')
@@ -172,196 +169,7 @@ export class TeamController {
     return this.teams.acceptInvite(teamId, inviteId, request.userId);
   }
 
-  @Post('invites/:inviteId/accept')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Accept an invite code by reference code',
-  })
-  acceptInviteByReference(
-    @Param('inviteId') inviteId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.acceptInviteByReference(inviteId, request.userId);
-  }
-
-  @Post('competition/:id')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Create a team for a competition',
-  })
-  create(
-    @Param('id') id: string,
-    @Req() request: AuthenticatedRequest,
-    @Body() dto: CreateTeamDto,
-  ) {
-    return this.teams.create(id, request.userId, dto);
-  }
-
-  @Post(':teamId/requests')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Request to join a public team',
-  })
-  requestJoin(
-    @Param('teamId') teamId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.requestJoin(teamId, request.userId);
-  }
-
-  @Get(':teamId/requests')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'List pending join requests for team (leader only)',
-  })
-  requests(
-    @Param('teamId') teamId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.listRequests(teamId, request.userId);
-  }
-
-  @Post(':teamId/requests/:requestId/accept')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Accept a join request (leader only)',
-  })
-  accept(
-    @Param('teamId') teamId: string,
-    @Param('requestId') requestId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.decide(teamId, requestId, request.userId, true);
-  }
-
-  @Post(':teamId/requests/:requestId/reject')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Reject a join request (leader only)',
-  })
-  reject(
-    @Param('teamId') teamId: string,
-    @Param('requestId') requestId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.decide(teamId, requestId, request.userId, false);
-  }
-
-  @Post(':teamId/leave')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Leave a team',
-  })
-  leaveTeam(
-    @Param('teamId') teamId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.leaveTeam(teamId, request.userId);
-  }
-
-  @Delete(':teamId/members/:memberId')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Remove a member from the team (leader only)',
-  })
-  @ApiParam({
-    name: 'teamId',
-    description: 'Team ID',
-    type: String,
-  })
-  @ApiParam({
-    name: 'memberId',
-    description: 'User ID of member to be removed',
-    type: String,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Member removed successfully',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad Request - Leader cannot remove themselves',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - invalid or missing session token',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - only the team leader can remove members',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Team or member not found',
-  })
-  removeMember(
-    @Param('teamId') teamId: string,
-    @Param('memberId') memberId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.teams.removeMember(teamId, memberId, request.userId);
-  }
-
-  @Post(':teamId/transfer-leadership')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Transfer team leadership to another member',
-  })
-  transferLeadership(
-    @Param('teamId') teamId: string,
-    @Req() request: AuthenticatedRequest,
-    @Body() dto: TransferLeadershipDto,
-  ) {
-    return this.teams.transferLeadership(teamId, request.userId, dto);
-  }
-
-  @Patch(':teamId/name')
-  @Put(':teamId/name')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Update team name (leader only)',
-  })
-  @ApiParam({
-    name: 'teamId',
-    description: 'Team ID',
-    type: String,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Team name updated successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - invalid or missing session token',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - only the team leader can update team name',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Team not found',
-  })
-  updateName(
-    @Param('teamId') teamId: string,
-    @Req() request: AuthenticatedRequest,
-    @Body() dto: UpdateTeamDto,
-  ) {
-    return this.teams.update(teamId, request.userId, dto);
-  }
-
   @Patch(':teamId')
-  @Put(':teamId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
@@ -394,6 +202,163 @@ export class TeamController {
     @Body() dto: UpdateTeamDto,
   ) {
     return this.teams.update(teamId, request.userId, dto);
+  }
+
+  @Post(':teamId/request-join')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Submit a request to join a team',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Join request submitted successfully',
+  })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Conflict - already a member or a pending join request already exists',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team not found',
+  })
+  requestJoin(
+    @Param('teamId') teamId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.requestJoin(teamId, request.userId);
+  }
+
+  @Get(':teamId/requests')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get the list of join requests for a team (leader only)',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Join requests retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only the team leader can view join requests',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team not found',
+  })
+  listRequestJoins(
+    @Param('teamId') teamId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.listRequestJoins(teamId, request.userId);
+  }
+
+  @Patch(':teamId/requests/:requestId/accept')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Accept a join request and add the user as a team member (leader only)',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiParam({
+    name: 'requestId',
+    description: 'Join request ID',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Join request accepted successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - join request already processed or user already a member',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only the team leader can accept join requests',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team or join request not found',
+  })
+  acceptRequestJoin(
+    @Param('teamId') teamId: string,
+    @Param('requestId') requestId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.acceptRequestJoin(teamId, requestId, request.userId);
+  }
+
+  @Patch(':teamId/requests/:requestId/reject')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reject a join request (leader only)',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID',
+    type: String,
+  })
+  @ApiParam({
+    name: 'requestId',
+    description: 'Join request ID',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Join request rejected successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - join request already processed',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only the team leader can reject join requests',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Team or join request not found',
+  })
+  rejectRequestJoin(
+    @Param('teamId') teamId: string,
+    @Param('requestId') requestId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.teams.rejectRequestJoin(teamId, requestId, request.userId);
   }
 }
 

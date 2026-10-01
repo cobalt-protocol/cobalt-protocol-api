@@ -36,7 +36,6 @@ describe('CompetitionController', () => {
   const mockCompetitionService = {
     findAll: vi.fn(),
     findListingTokenPrizes: vi.fn(),
-    findMyTeams: vi.fn(),
     findMyTeamByCompetitionId: vi.fn(),
     findTeamsByCompetitionId: vi.fn(),
     findOne: vi.fn(),
@@ -138,41 +137,6 @@ describe('CompetitionController', () => {
     });
   });
 
-  describe('findPrizeWinners', () => {
-    it('should return prize winners by competition id', async () => {
-      const mockPrizeWinnersResponse = {
-        data: [
-          {
-            id: '01J8Z9X0000000000000000002',
-            winner_id: '1',
-            category: '1st Place',
-            amount: '1000',
-            certificate_cid: 'QmWinnerCert123',
-            competition_id: '01J8Z9X0000000000000000001',
-          },
-        ],
-        message: 'Prize winners retrieved successfully',
-        errors: null,
-      };
-      mockCompetitionService.findPrizeWinners.mockResolvedValue(mockPrizeWinnersResponse);
-
-      const result = await controller.findPrizeWinners('01J8Z9X0000000000000000001');
-
-      expect(mockCompetitionService.findPrizeWinners).toHaveBeenCalledWith(
-        '01J8Z9X0000000000000000001',
-      );
-      expect(result).toEqual(mockPrizeWinnersResponse);
-    });
-
-    it('should throw NotFoundException if service throws NotFoundException', async () => {
-      mockCompetitionService.findPrizeWinners.mockRejectedValue(
-        new NotFoundException('No prize winners found for this competition'),
-      );
-
-      await expect(controller.findPrizeWinners('invalid-id')).rejects.toThrow(NotFoundException);
-    });
-  });
-
   describe('getTokenPrizeByCompetitionId', () => {
     it('should return token prize by competition id', async () => {
       const mockTokenPrizeResponse = {
@@ -236,39 +200,6 @@ describe('CompetitionController', () => {
     });
   });
 
-  describe('findMyTeams', () => {
-    it('should return teams for the authenticated user', async () => {
-      const mockTeamsResponse = {
-        data: [
-          {
-            id: 'team-1',
-            name: 'Cyber Warriors',
-            visibility: true,
-            user_id: 'user-1',
-          },
-        ],
-        message: 'Teams retrieved successfully',
-        errors: null,
-      };
-      mockCompetitionService.findMyTeams.mockResolvedValue(mockTeamsResponse);
-
-      const result = await controller.findMyTeams('Bearer valid-token');
-
-      expect(mockCompetitionService.findMyTeams).toHaveBeenCalledWith('Bearer valid-token');
-      expect(result).toEqual(mockTeamsResponse);
-    });
-
-    it('should throw NotFoundException if service throws NotFoundException when no teams found', async () => {
-      mockCompetitionService.findMyTeams.mockRejectedValue(
-        new NotFoundException('No teams found for the user'),
-      );
-
-      await expect(controller.findMyTeams('Bearer valid-token')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
   describe('findMyTeamByCompetitionId', () => {
     it('should return team for competition for the authenticated user', async () => {
       const mockTeamResponse = {
@@ -294,29 +225,6 @@ describe('CompetitionController', () => {
     });
   });
 
-  describe('findTeamsByCompetitionId', () => {
-    it('should return public teams for a competition', async () => {
-      const mockTeamsResponse = {
-        data: [
-          {
-            id: 'team-1',
-            name: 'Public Team 1',
-            visibility: true,
-            competition_id: 'comp-1',
-          },
-        ],
-        message: 'Teams retrieved successfully',
-        errors: null,
-      };
-      mockCompetitionService.findTeamsByCompetitionId.mockResolvedValue(mockTeamsResponse);
-
-      const result = await controller.findTeamsByCompetitionId('comp-1');
-
-      expect(mockCompetitionService.findTeamsByCompetitionId).toHaveBeenCalledWith('comp-1');
-      expect(result).toEqual(mockTeamsResponse);
-    });
-  });
-
   describe('createTeam', () => {
     it('should create a team for a competition', async () => {
       const mockTeamResponse = {
@@ -329,7 +237,7 @@ describe('CompetitionController', () => {
           user_id: 'user-1',
           team_code: 'COBALT-123456',
           team_codes: [{ id: 'tc-1', code: 'COBALT-123456' }],
-          skills_suggestions: [{ id: 'sk-1', name: 'React' }],
+          skills_team: [{ id: 'sk-1', name: 'React' }],
           created_at: new Date(),
         },
         message: 'Team created successfully',
@@ -341,7 +249,7 @@ describe('CompetitionController', () => {
         name: 'Test Team',
         visibility: true,
         description: 'Team description',
-        skills: ['React'],
+        skills_team: ['React'],
       };
 
       const result = await controller.createTeam('comp-1', 'Bearer token', dto);

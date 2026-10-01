@@ -192,7 +192,10 @@ describe('CompetitionService', () => {
       const result = await service.findOne('01J8Z9X0000000000000000001');
 
       expect(mockPrismaService.competition.findFirst).toHaveBeenCalledWith({
-        where: { id: '01J8Z9X0000000000000000001', deleted_at: null },
+        where: {
+          OR: [{ id: '01J8Z9X0000000000000000001' }, { competition_id: '01J8Z9X0000000000000000001' }],
+          deleted_at: null,
+        },
         include: {
           prize_winners: {
             where: { deleted_at: null },
@@ -352,86 +355,6 @@ describe('CompetitionService', () => {
     });
   });
 
-  describe('findMyTeams', () => {
-    it('should throw UnauthorizedException when no auth header is provided', async () => {
-      await expect(service.findMyTeams(undefined)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should throw UnauthorizedException when auth header format is invalid', async () => {
-      await expect(service.findMyTeams('Basic token')).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should throw UnauthorizedException when jwt verification fails', async () => {
-      mockJwtService.verifyAsync.mockRejectedValue(new Error('Invalid token'));
-
-      await expect(service.findMyTeams('Bearer invalid-token')).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should throw UnauthorizedException when user is not found', async () => {
-      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
-      mockPrismaService.user.findFirst.mockResolvedValue(null);
-
-      await expect(service.findMyTeams('Bearer valid-token')).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should return user teams successfully', async () => {
-      const mockUser = { id: 'user-1', wallet_address: '0x123' };
-      const mockTeams = [
-        {
-          id: 'team-1',
-          name: 'Cyber Warriors',
-          user_id: 'user-1',
-          skills_suggestions: [],
-          team_codes: [],
-          team_roles: [],
-        },
-      ];
-
-      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
-      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
-      mockPrismaService.team.findMany.mockResolvedValue(mockTeams);
-
-      const result = await service.findMyTeams('Bearer valid-token');
-
-      expect(mockPrismaService.team.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            OR: [
-              { user_id: 'user-1' },
-              { team_roles: { some: { user_id: 'user-1' } } },
-            ],
-            deleted_at: null,
-          }),
-        }),
-      );
-      expect(result).toEqual({
-        data: mockTeams,
-        message: 'Teams retrieved successfully',
-        errors: null,
-      });
-    });
-
-    it('should throw NotFoundException when no teams are found for the user', async () => {
-      const mockUser = { id: 'user-1', wallet_address: '0x123' };
-
-      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
-      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
-      mockPrismaService.team.findMany.mockResolvedValue([]);
-
-      await expect(service.findMyTeams('Bearer valid-token')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
   describe('findMyTeamByCompetitionId', () => {
     it('should throw UnauthorizedException when no auth header is provided', async () => {
       await expect(service.findMyTeamByCompetitionId('comp-1', undefined)).rejects.toThrow(
@@ -567,17 +490,18 @@ describe('CompetitionService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should successfully create a team with code and skill suggestions', async () => {
+    it('should create a private team with a generated team code and skill suggestions', async () => {
       const mockUser = { id: 'user-1', wallet_address: '0x123' };
       const mockComp = { id: 'comp-1', name: 'Hackathon 2026' };
       const mockCreatedTeam = {
         id: 'team-1',
         name: 'Alpha Team',
-        visibility: true,
+        visibility: false,
         description: 'Test description',
         competition_id: 'comp-1',
         user_id: 'user-1',
-        skills_suggestions: [{ id: 'sk-1', name: 'Solidity', team_id: 'team-1' }],
+        skills_team: [{ id: 'sk-1', name: 'Solidity', team_id: 'team-1' }],
+        requirements_team: { id: 'req-1', requirement: 'Test description', team_id: 'team-1' },
         team_codes: [{ id: 'tc-1', code: 'COBALT-ABC1234567', team_id: 'team-1' }],
         team_roles: [{ id: 'tr-1', role: 'LEAD', user_id: 'user-1', team_id: 'team-1' }],
         created_at: new Date('2026-09-24'),
@@ -591,31 +515,41 @@ describe('CompetitionService', () => {
 
       const dto = {
         name: 'Alpha Team',
-        visibility: true,
+        visibility: false,
         description: 'Test description',
-        skills_suggestion: ['Solidity'],
+        skills_team: ['Solidity'],
       };
 
       const result = await service.createTeam('comp-1', 'Bearer valid-token', dto);
 
       expect(mockPrismaService.team.create).toHaveBeenCalled();
+      const createData = mockPrismaService.team.create.mock.calls[mockPrismaService.team.create.mock.calls.length - 1][0].data;
+      expect(createData.team_codes).toBeDefined();
+      expect(createData.team_codes.create[0].code).toMatch(/^COBALT-/);
+      expect(createData.requirements_team).toEqual({
+        create: {
+          requirement: 'Test description',
+        },
+      });
       expect(result.message).toBe('Team created successfully');
       expect(result.data.name).toBe('Alpha Team');
-      expect(result.data.skills_suggestions).toHaveLength(1);
+      expect(result.data.skills_team).toHaveLength(1);
+      expect(result.data.requirements_team).toBeDefined();
       expect(result.data.team_code).toBeDefined();
     });
 
-    it('should create a private team without generating a team code', async () => {
+    it('should create a public team without generating a team code', async () => {
       const mockUser = { id: 'user-1', wallet_address: '0x123' };
       const mockComp = { id: 'comp-1', name: 'Hackathon 2026' };
       const mockCreatedTeam = {
         id: 'team-2',
-        name: 'Private Team',
-        visibility: false,
-        description: 'Private description',
+        name: 'Public Team',
+        visibility: true,
+        description: 'Public description',
         competition_id: 'comp-1',
         user_id: 'user-1',
-        skills_suggestions: [],
+        skills_team: [],
+        requirements_team: { id: 'req-2', requirement: 'Public description', team_id: 'team-2' },
         team_codes: [],
         team_roles: [{ id: 'tr-1', role: 'LEAD', user_id: 'user-1', team_id: 'team-2' }],
         created_at: new Date('2026-09-24'),
@@ -628,9 +562,9 @@ describe('CompetitionService', () => {
       mockPrismaService.team.create.mockResolvedValue(mockCreatedTeam);
 
       const dto = {
-        name: 'Private Team',
-        visibility: false,
-        description: 'Private description',
+        name: 'Public Team',
+        visibility: true,
+        description: 'Public description',
       };
 
       const result = await service.createTeam('comp-1', 'Bearer valid-token', dto);
@@ -638,7 +572,7 @@ describe('CompetitionService', () => {
       expect(mockPrismaService.team.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            visibility: false,
+            visibility: true,
           }),
         }),
       );

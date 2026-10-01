@@ -335,101 +335,6 @@ export class CompetitionService {
     };
   }
 
-  async findMyTeams(authHeader?: string) {
-    if (!authHeader) {
-      throw new UnauthorizedException('Missing authorization header');
-    }
-
-    const [type, token] = authHeader.split(' ');
-    if (type !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Invalid authorization header format');
-    }
-
-    let payload: any;
-    try {
-      payload = await this.jwtService.verifyAsync(token);
-    } catch {
-      throw new UnauthorizedException('Invalid or expired token');
-    }
-
-    const userId = payload.sub ?? null;
-    const walletAddress = payload.wallet_address ?? null;
-
-    if (!userId && !walletAddress) {
-      throw new UnauthorizedException('Invalid token payload');
-    }
-
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          ...(userId ? [{ id: userId }] : []),
-          ...(walletAddress
-            ? [
-                {
-                  wallet_address: {
-                    equals: walletAddress,
-                    mode: 'insensitive' as const,
-                  },
-                },
-              ]
-            : []),
-        ],
-      },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    const teams = await this.prisma.team.findMany({
-      where: {
-        OR: [
-          { user_id: user.id },
-          {
-            team_roles: {
-              some: {
-                user_id: user.id,
-              },
-            },
-          },
-        ],
-        deleted_at: null,
-      },
-      include: {
-        skills_suggestions: true,
-        team_codes: true,
-        team_roles: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                email: true,
-                wallet_address: true,
-                institution: true,
-                location: true,
-              },
-            },
-          },
-        },
-        competition: true,
-      },
-      orderBy: {
-        created_at: 'desc',
-      },
-    });
-
-    if (!teams || teams.length === 0) {
-      throw new NotFoundException('No teams found for the user');
-    }
-
-    return {
-      data: teams,
-      message: 'Teams retrieved successfully',
-      errors: null,
-    };
-  }
-
   async findMyTeamByCompetitionId(id: string, authHeader?: string) {
     if (!authHeader) {
       throw new UnauthorizedException('Missing authorization header');
@@ -500,12 +405,39 @@ export class CompetitionService {
               },
             },
           },
+          {
+            request_joins: {
+              some: {
+                user_id: user.id,
+                status: 'pending',
+                deleted_at: null,
+              },
+            },
+          },
         ],
       },
       include: {
-        skills_suggestions: true,
+        skills_team: true,
+        requirements_team: true,
         team_codes: true,
         team_roles: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                wallet_address: true,
+                institution: true,
+                location: true,
+              },
+            },
+          },
+        },
+        request_joins: {
+          where: {
+            deleted_at: null,
+          },
           include: {
             user: {
               select: {
@@ -551,7 +483,8 @@ export class CompetitionService {
         deleted_at: null,
       },
       include: {
-        skills_suggestions: true,
+        skills_team: true,
+        requirements_team: true,
         team_codes: true,
         team_roles: {
           include: {
@@ -584,7 +517,7 @@ export class CompetitionService {
   async findOne(id: string) {
     const competition = await this.prisma.competition.findFirst({
       where: {
-        id,
+        OR: [{ id }, { competition_id: id }],
         deleted_at: null,
       },
       include: {
@@ -659,6 +592,43 @@ export class CompetitionService {
     };
   }
 
+  private computeTokenPrize(
+    competition:
+      | { id: string; competition_id: string; token_address: string }
+      | null
+      | undefined,
+    prizeDeposits: { token_address: string; amount: { toString(): string } }[],
+  ) {
+    if (!competition) {
+      return null;
+    }
+
+    let totalPrizeBigInt = 0n;
+    for (const deposit of prizeDeposits) {
+      if (deposit.amount) {
+        const strVal = deposit.amount.toString();
+        const intPart = strVal.split('.')[0] || '0';
+        try {
+          totalPrizeBigInt += BigInt(intPart);
+        } catch {
+          totalPrizeBigInt += BigInt(Math.floor(Number(strVal)));
+        }
+      }
+    }
+
+    const tokenAddress =
+      prizeDeposits.find((deposit) => Boolean(deposit.token_address))
+        ?.token_address || competition.token_address;
+
+    return {
+      competition_id: competition.id,
+      onchain_competition_id: competition.competition_id,
+      token_address: tokenAddress,
+      total_prize: totalPrizeBigInt.toString(),
+      prize_deposits_count: prizeDeposits.length,
+    };
+  }
+
   async getTokenPrizeByCompetitionId(id: string) {
     const competition = await this.prisma.competition.findFirst({
       where: {
@@ -682,31 +652,8 @@ export class CompetitionService {
       },
     });
 
-    let totalPrizeBigInt = 0n;
-    for (const deposit of prizeDeposits) {
-      if (deposit.amount) {
-        const strVal = deposit.amount.toString();
-        const intPart = strVal.split('.')[0] || '0';
-        try {
-          totalPrizeBigInt += BigInt(intPart);
-        } catch {
-          totalPrizeBigInt += BigInt(Math.floor(Number(strVal)));
-        }
-      }
-    }
-
-    const tokenAddress =
-      prizeDeposits.find((d) => Boolean(d.token_address))?.token_address ||
-      competition.token_address;
-
     return {
-      data: {
-        competition_id: competition.id,
-        onchain_competition_id: competition.competition_id,
-        token_address: tokenAddress,
-        total_prize: totalPrizeBigInt.toString(),
-        prize_deposits_count: prizeDeposits.length,
-      },
+      data: this.computeTokenPrize(competition, prizeDeposits),
       message: 'Token prize retrieved successfully',
       errors: null,
     };
@@ -789,13 +736,10 @@ export class CompetitionService {
       );
     }
 
-    const isPublic = Boolean(dto.visibility);
-    const teamCodeStr = isPublic
+    const isPrivate = !dto.visibility;
+    const teamCodeStr = isPrivate
       ? `COBALT-${randomBytes(5).toString('hex').toUpperCase()}`
       : null;
-
-    const skillsList =
-      dto.skills ?? dto.skills_suggestion ?? dto.skills_suggestions ?? [];
 
     const teamName =
       dto.name && dto.name.trim()
@@ -806,17 +750,23 @@ export class CompetitionService {
       const team = await this.prisma.team.create({
         data: {
           name: teamName,
-          visibility: isPublic,
+          visibility: Boolean(dto.visibility),
           description: dto.description ? dto.description.trim() : '',
           competition_id: competition.id,
           user_id: user.id,
-          skills_suggestions: {
-            create: skillsList
-              .map((s) => (typeof s === 'string' ? s.trim() : ''))
-              .filter((name) => name.length > 0)
-              .map((name) => ({ name })),
+          skills_team: {
+            create:
+              dto.skills_team
+                ?.map((s) => (typeof s === 'string' ? s.trim() : ''))
+                .filter((name) => name.length > 0)
+                .map((name) => ({ name })) ?? [],
           },
-          ...(isPublic && teamCodeStr
+          requirements_team: {
+            create: {
+              requirement: dto.description ? dto.description.trim() : '',
+            },
+          },
+          ...(isPrivate && teamCodeStr
             ? {
                 team_codes: {
                   create: [
@@ -837,7 +787,8 @@ export class CompetitionService {
           },
         },
         include: {
-          skills_suggestions: true,
+          skills_team: true,
+          requirements_team: true,
           team_codes: true,
           team_roles: true,
         },
@@ -853,7 +804,8 @@ export class CompetitionService {
           user_id: team.user_id,
           team_code: teamCodeStr,
           team_codes: team.team_codes,
-          skills_suggestions: team.skills_suggestions,
+          skills_team: team.skills_team,
+          requirements_team: team.requirements_team,
           created_at: team.created_at,
           updated_at: team.updated_at,
         },

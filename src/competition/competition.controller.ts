@@ -161,82 +161,6 @@ export class CompetitionController {
     return this.competitionService.findListingTokenPrizes();
   }
 
-  @Get(['teams', 'teams/me', 'my-teams'])
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Get list of teams for the authenticated user from team table',
-  })
-  @ApiBearerAuth()
-  @ApiResponse({
-    status: 200,
-    description: 'User teams retrieved successfully',
-    schema: {
-      example: {
-        data: [
-          {
-            id: '01J8Z9X0000000000000000005',
-            name: 'Cyber Warriors',
-            visibility: true,
-            description: 'Building decentralized AI applications',
-            competition_id: '01J8Z9X0000000000000000001',
-            user_id: '01J8Z9X0000000000000000004',
-            skills_suggestions: [
-              {
-                id: '01J8Z9X0000000000000000007',
-                name: 'Frontend Developer',
-                team_id: '01J8Z9X0000000000000000005',
-                created_at: '2026-09-24T00:00:00.000Z',
-                updated_at: null,
-                deleted_at: null,
-              },
-            ],
-            team_codes: [
-              {
-                id: '01J8Z9X0000000000000000006',
-                code: 'COBALT-A1B2C3D4E5',
-                team_id: '01J8Z9X0000000000000000005',
-                created_at: '2026-09-24T00:00:00.000Z',
-                updated_at: null,
-                deleted_at: null,
-              },
-            ],
-            team_roles: [
-              {
-                id: '01J8Z9X0000000000000000008',
-                team_id: '01J8Z9X0000000000000000005',
-                user_id: '01J8Z9X0000000000000000004',
-                role: 'LEAD',
-                created_at: '2026-09-24T00:00:00.000Z',
-              },
-            ],
-            created_at: '2026-09-24T00:00:00.000Z',
-            updated_at: null,
-          },
-        ],
-        message: 'Teams retrieved successfully',
-        errors: null,
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - missing or invalid Bearer token',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'No teams found for the user',
-    schema: {
-      example: {
-        data: null,
-        message: 'No teams found for the user',
-        errors: null,
-      },
-    },
-  })
-  async findMyTeams(@Headers('authorization') authHeader?: string) {
-    return this.competitionService.findMyTeams(authHeader);
-  }
-
   @Get(':id/my-team')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -268,30 +192,6 @@ export class CompetitionController {
     @Headers('authorization') authHeader?: string,
   ) {
     return this.competitionService.findMyTeamByCompetitionId(id, authHeader);
-  }
-
-  @Get(':id/teams')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary:
-      'Get list of teams for a specific competition by competition ID or on-chain ID (filtered by visibility: true)',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Competition ID (ULID or on-chain ID)',
-    type: String,
-    example: '01J8Z9X0000000000000000001',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Teams retrieved successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Competition not found',
-  })
-  async findTeamsByCompetitionId(@Param('id') id: string) {
-    return this.competitionService.findTeamsByCompetitionId(id);
   }
 
   @Get(':id')
@@ -350,69 +250,6 @@ export class CompetitionController {
     return this.competitionService.findOne(id);
   }
 
-  @Get(':id/prize-winners')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Get prize winners by competition ID',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Competition ID (ULID or on-chain ID)',
-    type: String,
-    example: '01J8Z9X0000000000000000001',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Prize winners retrieved successfully',
-    schema: {
-      example: {
-        data: [
-          {
-            id: '01J8Z9X0000000000000000002',
-            winner_id: '1',
-            category: '1st Place',
-            amount: '1000.000000000000000000',
-            certificate_cid: 'QmWinnerCert123...',
-            competition_id: '01J8Z9X0000000000000000001',
-            created_at: '2026-09-23T00:00:00.000Z',
-            updated_at: null,
-            deleted_at: null,
-            winner: {
-              id: '01J8Z9X0000000000000000003',
-              wallet_address: '0x1234567890123456789012345678901234567890',
-              user_id: '01J8Z9X0000000000000000004',
-              prize_winner_id: '01J8Z9X0000000000000000002',
-              user: {
-                id: '01J8Z9X0000000000000000004',
-                wallet_address: '0x1234567890123456789012345678901234567890',
-                username: 'alice',
-                email: 'alice@example.com',
-                location: 'Jakarta',
-                institution: 'ITB',
-              },
-            },
-          },
-        ],
-        message: 'Prize winners retrieved successfully',
-        errors: null,
-      },
-    },
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Competition or prize winners not found',
-    schema: {
-      example: {
-        data: null,
-        message: 'No prize winners found for this competition',
-        errors: null,
-      },
-    },
-  })
-  async findPrizeWinners(@Param('id') id: string) {
-    return this.competitionService.findPrizeWinners(id);
-  }
-
   @Get(':id/token-prize')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -460,6 +297,8 @@ export class CompetitionController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a team for a competition',
+    description:
+      'Creates a team for the authenticated user. An invite code (team_code) is only generated for private teams (visibility: false). Public teams (visibility: true) can be joined directly and therefore do not receive a team_code.',
   })
   @ApiBearerAuth()
   @ApiParam({
@@ -470,13 +309,14 @@ export class CompetitionController {
   })
   @ApiResponse({
     status: 201,
-    description: 'Team created successfully',
+    description:
+      'Team created successfully. team_code is only returned for private teams (visibility: false).',
     schema: {
       example: {
         data: {
           id: '01J8Z9X0000000000000000005',
           name: 'Cyber Warriors',
-          visibility: true,
+          visibility: false,
           description: 'Building decentralized AI applications',
           competition_id: '01J8Z9X0000000000000000001',
           user_id: '01J8Z9X0000000000000000004',
@@ -491,7 +331,7 @@ export class CompetitionController {
               deleted_at: null,
             },
           ],
-          skills_suggestions: [
+          skills_team: [
             {
               id: '01J8Z9X0000000000000000007',
               name: 'Frontend Developer',
@@ -501,6 +341,14 @@ export class CompetitionController {
               deleted_at: null,
             },
           ],
+          requirements_team: {
+            id: '01J8Z9X0000000000000000009',
+            requirement: 'Building decentralized AI applications',
+            team_id: '01J8Z9X0000000000000000005',
+            created_at: '2026-09-24T00:00:00.000Z',
+            updated_at: null,
+            deleted_at: null,
+          },
           created_at: '2026-09-24T00:00:00.000Z',
           updated_at: null,
         },

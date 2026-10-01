@@ -5,8 +5,6 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import type { ProfileQueryDto } from './dto/profile-query.dto.js';
-import type { ProfileSkillLevel } from './dto/profile-skill.dto.js';
 import type { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 const publicSelect = {
@@ -60,55 +58,6 @@ function presentPrivate(user: PrivateProfile) {
 @Injectable()
 export class ProfileService {
   constructor(private readonly prisma: PrismaService) {}
-
-  async findAll(query: ProfileQueryDto) {
-    const page = query.page ?? 1;
-    const limit = Math.min(query.limit ?? 10, 50);
-    const search = query.search?.trim();
-    const where: Prisma.UserWhereInput = {
-      deleted_at: null,
-      username: { not: null },
-      ...(search
-        ? {
-            OR: [
-              { username: { contains: search, mode: 'insensitive' } },
-              { location: { contains: search, mode: 'insensitive' } },
-              { institution: { contains: search, mode: 'insensitive' } },
-              {
-                skills: {
-                  some: {
-                    skill_name: { contains: search, mode: 'insensitive' },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-    const [total, data] = await Promise.all([
-      this.prisma.user.count({ where }),
-      this.prisma.user.findMany({
-        where,
-        select: publicSelect,
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { created_at: 'desc' },
-      }),
-    ]);
-    return {
-      data: data.map(presentPublic),
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
-  }
-
-  async findPublic(username: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { username, deleted_at: null },
-      select: publicSelect,
-    });
-    if (!user) throw new NotFoundException('Profile not found');
-    return presentPublic(user);
-  }
 
   async findMine(userId: string) {
     const user = await this.prisma.user.findFirst({
@@ -166,7 +115,7 @@ export class ProfileService {
         }
 
         if (description !== undefined) {
-          await tx.skillDescription.upsert({
+          await tx.skillDescriptionUser.upsert({
             where: { user_id: userId },
             create: { user_id: userId, description },
             update: { description },
@@ -174,11 +123,11 @@ export class ProfileService {
         }
 
         if (githubLink !== undefined || linkedinLink !== undefined) {
-          const currentSocial = await tx.socialMedia.findUnique({
+          const currentSocial = await tx.socialMediaUser.findUnique({
             where: { user_id: userId },
           });
           if (currentSocial) {
-            await tx.socialMedia.update({
+            await tx.socialMediaUser.update({
               where: { user_id: userId },
               data: {
                 ...(githubLink !== undefined && { github_link: githubLink }),
@@ -186,7 +135,7 @@ export class ProfileService {
               },
             });
           } else {
-            await tx.socialMedia.create({
+            await tx.socialMediaUser.create({
               data: {
                 user_id: userId,
                 github_link: githubLink ?? '',
@@ -200,9 +149,9 @@ export class ProfileService {
           const names = dto.skills
             .map((skill) => skill.name.trim())
             .filter(Boolean);
-          await tx.skill.deleteMany({ where: { user_id: userId } });
+          await tx.skillUser.deleteMany({ where: { user_id: userId } });
           if (names.length > 0) {
-            await tx.skill.createMany({
+            await tx.skillUser.createMany({
               data: names.map((skill_name) => ({
                 user_id: userId,
                 skill_name,

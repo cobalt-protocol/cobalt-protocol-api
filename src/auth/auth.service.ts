@@ -9,9 +9,9 @@ import { randomBytes } from 'node:crypto';
 import { verifyMessage } from 'viem';
 import {
   User,
-  SkillDescription,
-  SocialMedia,
-  Skill,
+  SkillDescriptionUser,
+  SocialMediaUser,
+  SkillUser,
   Organization,
 } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -23,10 +23,10 @@ export type UserRole = 'organization' | 'user';
 
 export type UserWithRole = User & {
   role: UserRole;
-  skill_description?: SkillDescription | null;
-  social_media?: SocialMedia | null;
-  skill?: Skill | null;
-  skills?: Skill[];
+  skill_description?: SkillDescriptionUser | null;
+  social_media?: SocialMediaUser | null;
+  skill?: SkillUser | null;
+  skills?: SkillUser[];
   organization?: Organization | null;
 };
 

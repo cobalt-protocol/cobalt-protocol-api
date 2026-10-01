@@ -22,12 +22,13 @@ model User {
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
-  skills                         Skill[]
-  skill_description              SkillDescription?
-  social_media                   SocialMedia?
+  skills                         SkillUser[]
+  skill_description              SkillDescriptionUser?
+  social_media                   SocialMediaUser?
   organizations                  Organization[]
   teams                          Team[]
   team_roles                     TeamRole[]
+  request_joins                  RequestJoin[]
   winner                         Winner?
   nonce_connect                  NonceConnect?
   nonce_certificate_participants NonceCertificateParticipant[]
@@ -37,7 +38,7 @@ model User {
   @@map("users")
 }
 
-model Skill {
+model SkillUser {
   id         String    @id @default(ulid())
   user_id    String
   skill_name String
@@ -48,10 +49,10 @@ model Skill {
   user User @relation(fields: [user_id], references: [id])
 
   @@unique([user_id, skill_name])
-  @@map("skills")
+  @@map("skills_user")
 }
 
-model SkillDescription {
+model SkillDescriptionUser {
   id          String    @id @default(ulid())
   description String
   user_id     String    @unique
@@ -61,10 +62,10 @@ model SkillDescription {
 
   user User @relation(fields: [user_id], references: [id])
 
-  @@map("skill_description")
+  @@map("skill_description_user")
 }
 
-model SocialMedia {
+model SocialMediaUser {
   id            String    @id @default(ulid())
   github_link   String
   linkedin_link String
@@ -75,7 +76,7 @@ model SocialMedia {
 
   user User @relation(fields: [user_id], references: [id])
 
-  @@map("social_media")
+  @@map("social_media_user")
 }
 
 model Organization {
@@ -118,20 +119,36 @@ model Competition {
   updated_at              DateTime? @updatedAt
   deleted_at              DateTime?
 
-  prize_winners                        PrizeWinner[]
-  user                                 User?                              @relation(fields: [user_id], references: [id])
-  price_competition                    PriceCompetition?                  @relation(fields: [price_competition_id], references: [id])
-  teams                                Team[]
-  nonce_certificate_participant        NonceCertificateParticipant[]
-  nonce_certificate_winner             NonceCertificateWinner[]
-  prize_deposits                       PrizeDeposited[]
-  competition_fee_paid                 CompetitionFeePaid?
-  participant_winners                  ParticipantWinner[]
-  prize_distributions                  PrizeDistributed[]
-  certificate_participant_minted       CertificateParticipantMinted[]
+  prize_winners                         PrizeWinner[]
+  user                                  User?                                @relation(fields: [user_id], references: [id])
+  price_competition                     PriceCompetition?                    @relation(fields: [price_competition_id], references: [id])
+  teams                                 Team[]
+  nonce_certificate_participant         NonceCertificateParticipant[]
+  nonce_certificate_winner              NonceCertificateWinner[]
+  prize_deposits                        PrizeDeposited[]
+  competition_fee_paid                  CompetitionFeePaid?
+  participant_winners                   ParticipantWinner[]
+  prize_distributions                   PrizeDistributed[]
+  certificate_participant_minted        CertificateParticipantMinted[]
   certificate_participant_winner_minted CertificateParticipantWinnerMinted[]
 
   @@map("competition")
+}
+
+model SubmissionProject {
+  id              String    @id @default(ulid())
+  title           String
+  description     String?
+  submission_link String
+  document_cid    String
+  team_id         String    @unique
+  created_at      DateTime  @default(now())
+  updated_at      DateTime? @updatedAt
+  deleted_at      DateTime?
+
+  team Team @relation(fields: [team_id], references: [id])
+
+  @@map("submission_project")
 }
 
 model PrizeWinner {
@@ -164,14 +181,17 @@ model Team {
 
   competition        Competition        @relation(fields: [competition_id], references: [id])
   user               User               @relation(fields: [user_id], references: [id])
-  skills_suggestions SkillsSuggestion[]
+  skills_team        SkillsTeam[]
+  requirements_team  RequirementsTeam?
+  request_joins      RequestJoin[]
   team_codes         TeamCode[]
   team_roles         TeamRole[]
+  submission_project SubmissionProject?
 
   @@map("team")
 }
 
-model SkillsSuggestion {
+model SkillsTeam {
   id         String    @id @default(ulid())
   name       String
   team_id    String
@@ -181,7 +201,36 @@ model SkillsSuggestion {
 
   team Team @relation(fields: [team_id], references: [id])
 
-  @@map("skills_suggestion")
+  @@map("skills_team")
+}
+
+model RequirementsTeam {
+  id          String    @id @default(ulid())
+  requirement String
+  team_id     String    @unique
+  created_at  DateTime  @default(now())
+  updated_at  DateTime? @updatedAt
+  deleted_at  DateTime?
+
+  team Team @relation(fields: [team_id], references: [id])
+
+  @@map("requirements_team")
+}
+
+model RequestJoin {
+  id         String    @id @default(ulid())
+  status     String    @default("pending")
+  user_id    String
+  team_id    String
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id])
+  team Team @relation(fields: [team_id], references: [id])
+
+  @@unique([team_id, user_id])
+  @@map("request_join")
 }
 
 model TeamCode {
@@ -199,7 +248,7 @@ model TeamCode {
 
 model TeamRole {
   id         String    @id @default(ulid())
-  role       String
+  role       String    @default("leader")
   user_id    String
   team_id    String
   created_at DateTime  @default(now())
