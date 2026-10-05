@@ -11,6 +11,8 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── users ────────────────────────────────────────────────────────────────────
+
 model User {
   id             String    @id @default(ulid())
   wallet_address String    @unique
@@ -31,8 +33,8 @@ model User {
   request_joins                  RequestJoin[]
   winner                         Winner?
   nonce_connect                  NonceConnect?
-  nonce_certificate_participants NonceCertificateParticipant[]
-  nonce_certificate_winners      NonceCertificateWinner[]
+  signature_certificate_participants SignatureCertificateParticipant[]
+  signature_certificate_winners      SignatureCertificateWinner[]
   competitions                   Competition[]
 
   @@map("users")
@@ -95,6 +97,8 @@ model Organization {
   @@map("organization")
 }
 
+// ── competition ───────────────────────────────────────────────────────────────
+
 model Competition {
   id                      String    @id @default(ulid())
   tx_hash                 String    @unique
@@ -111,7 +115,8 @@ model Competition {
   pirze_certificate_claim DateTime
   certificate_cid         String
   guidebook_cid           String
-  token_address           String
+  fee                     Decimal?
+  fee_token_address       String?
   user_id                 String?
   price_competition_id    String?
   competition_id          String
@@ -121,11 +126,11 @@ model Competition {
 
   prize_winners                         PrizeWinner[]
   user                                  User?                                @relation(fields: [user_id], references: [id])
-  price_competition                     PriceCompetition?                    @relation(fields: [price_competition_id], references: [id])
   teams                                 Team[]
-  nonce_certificate_participant         NonceCertificateParticipant[]
-  nonce_certificate_winner              NonceCertificateWinner[]
+  signature_certificate_participant         SignatureCertificateParticipant[]
+  signature_certificate_winner              SignatureCertificateWinner[]
   prize_deposits                        PrizeDeposited[]
+  price_competition                     PriceCompetition?                    @relation(fields: [price_competition_id], references: [id])
   competition_fee_paid                  CompetitionFeePaid?
   participant_winners                   ParticipantWinner[]
   prize_distributions                   PrizeDistributed[]
@@ -133,22 +138,6 @@ model Competition {
   certificate_participant_winner_minted CertificateParticipantWinnerMinted[]
 
   @@map("competition")
-}
-
-model SubmissionProject {
-  id              String    @id @default(ulid())
-  title           String
-  description     String?
-  submission_link String
-  document_cid    String
-  team_id         String    @unique
-  created_at      DateTime  @default(now())
-  updated_at      DateTime? @updatedAt
-  deleted_at      DateTime?
-
-  team Team @relation(fields: [team_id], references: [id])
-
-  @@map("submission_project")
 }
 
 model PrizeWinner {
@@ -167,6 +156,8 @@ model PrizeWinner {
 
   @@map("prize_winner")
 }
+
+// ── team ──────────────────────────────────────────────────────────────────────
 
 model Team {
   id             String    @id @default(ulid())
@@ -187,6 +178,8 @@ model Team {
   team_codes         TeamCode[]
   team_roles         TeamRole[]
   submission_project SubmissionProject?
+  signature_certificate_participants SignatureCertificateParticipant[]
+  signature_certificate_winners      SignatureCertificateWinner[]
 
   @@map("team")
 }
@@ -229,7 +222,6 @@ model RequestJoin {
   user User @relation(fields: [user_id], references: [id])
   team Team @relation(fields: [team_id], references: [id])
 
-  @@unique([team_id, user_id])
   @@map("request_join")
 }
 
@@ -261,6 +253,24 @@ model TeamRole {
   @@map("team_role")
 }
 
+model SubmissionProject {
+  id              String    @id @default(ulid())
+  title           String
+  description     String?
+  submission_link String
+  document_cid    String
+  team_id         String    @unique
+  created_at      DateTime  @default(now())
+  updated_at      DateTime? @updatedAt
+  deleted_at      DateTime?
+
+  team Team @relation(fields: [team_id], references: [id])
+
+  @@map("submission_project")
+}
+
+// ── user lookups ──────────────────────────────────────────────────────────────
+
 model Winner {
   id              String    @id @default(ulid())
   wallet_address  String
@@ -289,47 +299,53 @@ model NonceConnect {
   @@map("nonce_connect")
 }
 
-model NonceCertificateParticipant {
+model SignatureCertificateParticipant {
   id             String    @id @default(ulid())
-  nonce          String    @unique
+  signature      String
   user_id        String
   competition_id String
+  team_id        String
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
   user        User        @relation(fields: [user_id], references: [id])
   competition Competition @relation(fields: [competition_id], references: [id])
+  team        Team        @relation(fields: [team_id], references: [id])
 
-  @@map("nonce_certificate_participant")
+  @@map("signature_certificate_participant")
 }
 
-model NonceCertificateWinner {
+model SignatureCertificateWinner {
   id             String    @id @default(ulid())
-  nonce          String    @unique
+  signature      String
   user_id        String
   competition_id String
+  team_id        String
   created_at     DateTime  @default(now())
   updated_at     DateTime? @updatedAt
   deleted_at     DateTime?
 
   user        User        @relation(fields: [user_id], references: [id])
   competition Competition @relation(fields: [competition_id], references: [id])
+  team        Team        @relation(fields: [team_id], references: [id])
 
-  @@map("nonce_certificate_winner")
+  @@map("signature_certificate_winner")
 }
 
-model ListingTokenPrize {
-  id                     String    @id @default(ulid())
-  tx_hash                String
-  listing_token_prize_id BigInt
-  token_address          String
-  is_active              Boolean   @default(true)
-  created_at             DateTime  @default(now())
-  updated_at             DateTime? @updatedAt
-  deleted_at             DateTime?
+// ── on-chain events ───────────────────────────────────────────────────────────
 
-  @@map("listing_token_prize")
+model ListingToken {
+  id               String    @id @default(ulid())
+  tx_hash          String
+  listing_token_id BigInt
+  token_address    String
+  is_active        Boolean   @default(true)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime? @updatedAt
+  deleted_at       DateTime?
+
+  @@map("listing_token")
 }
 
 model PrizeDeposited {
@@ -416,16 +432,6 @@ model PrizeDistributed {
   @@map("prize_distributed")
 }
 
-model IndexerState {
-  id                 String    @id @default(ulid())
-  contract_name      String    @unique
-  last_scanned_block Int
-  created_at         DateTime  @default(now())
-  updated_at         DateTime? @updatedAt
-
-  @@map("indexer_state")
-}
-
 model CertificateParticipantMinted {
   id             String    @id @default(ulid())
   tx_hash        String
@@ -457,4 +463,16 @@ model CertificateParticipantWinnerMinted {
   competition Competition @relation(fields: [competition_id], references: [id])
 
   @@map("certificate_participant_winner_minted")
+}
+
+// ── indexer ───────────────────────────────────────────────────────────────────
+
+model IndexerState {
+  id                 String    @id @default(ulid())
+  contract_name      String    @unique
+  last_scanned_block Int
+  created_at         DateTime  @default(now())
+  updated_at         DateTime? @updatedAt
+
+  @@map("indexer_state")
 }

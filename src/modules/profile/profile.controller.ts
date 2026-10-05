@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Patch,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Patch, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   AuthSessionGuard,
@@ -29,4 +23,3 @@ export class ProfileController {
     return this.profiles.updateMine(request.userId, dto);
   }
 }
-

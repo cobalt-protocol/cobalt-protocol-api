@@ -60,10 +60,7 @@ export class SubmissionProjectController {
     @Param('teamId') teamId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.submissionProjectService.getSubmission(
-      teamId,
-      request.userId,
-    );
+    return this.submissionProjectService.getSubmission(teamId, request.userId);
   }
 
   @Post(':teamId/submission')

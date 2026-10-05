@@ -37,4 +37,3 @@ export class TeamQueryDto {
   @Min(1)
   limit: number = 6;
 }
-

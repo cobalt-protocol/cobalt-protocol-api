@@ -44,4 +44,3 @@ import { SubmissionProjectModule } from './modules/submission-project/submission
   ],
 })
 export class AppModule {}
-

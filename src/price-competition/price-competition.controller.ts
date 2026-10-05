@@ -5,7 +5,9 @@ import { PriceCompetitionService } from './price-competition.service.js';
 @ApiTags('Price Competitions')
 @Controller('price-competitions')
 export class PriceCompetitionController {
-  constructor(private readonly priceCompetitionService: PriceCompetitionService) {}
+  constructor(
+    private readonly priceCompetitionService: PriceCompetitionService,
+  ) {}
 
   @Get(':id')
   @HttpCode(HttpStatus.OK)
@@ -25,7 +27,8 @@ export class PriceCompetitionController {
       example: {
         data: {
           id: '01J8Z9X0000000000000000001',
-          tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+          tx_hash:
+            '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
           price_competition_fee_id: '1',
           treasury_fee: '50.000000000000000000',
           token_address: '0x1234567890123456789012345678901234567890',
@@ -56,5 +59,3 @@ export class PriceCompetitionController {
     return this.priceCompetitionService.findOne(id);
   }
 }
-
-

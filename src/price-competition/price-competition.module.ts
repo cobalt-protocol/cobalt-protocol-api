@@ -9,4 +9,3 @@ import { PriceCompetitionService } from './price-competition.service.js';
   exports: [PriceCompetitionService],
 })
 export class PriceCompetitionModule {}
-

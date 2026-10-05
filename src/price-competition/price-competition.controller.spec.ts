@@ -33,7 +33,9 @@ describe('PriceCompetitionController', () => {
       ],
     }).compile();
 
-    controller = module.get<PriceCompetitionController>(PriceCompetitionController);
+    controller = module.get<PriceCompetitionController>(
+      PriceCompetitionController,
+    );
   });
 
   it('should be defined', () => {

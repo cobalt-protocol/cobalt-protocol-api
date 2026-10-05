@@ -41,6 +41,15 @@ describe('TeamService', () => {
       create: vi.fn(),
       update: vi.fn(),
     },
+    teamCode: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    signatureCertificateParticipant: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
     skillsSuggestion: {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
@@ -75,7 +84,11 @@ describe('TeamService', () => {
           id: 'team-1',
           name: 'Public Team 1',
           visibility: true,
-          competition: { id: 'comp-1', competition_id: 'comp-1', name: 'Comp 1' },
+          competition: {
+            id: 'comp-1',
+            competition_id: 'comp-1',
+            name: 'Comp 1',
+          },
           team_roles: [],
           team_codes: [],
         },
@@ -143,10 +156,7 @@ describe('TeamService', () => {
 
       expect(mockPrismaService.competition.findFirst).toHaveBeenCalledWith({
         where: {
-          OR: [
-            { id: 'comp-1' },
-            { competition_id: 'comp-1' },
-          ],
+          OR: [{ id: 'comp-1' }, { competition_id: 'comp-1' }],
           deleted_at: null,
         },
       });
@@ -197,7 +207,7 @@ describe('TeamService', () => {
       const mockComp = {
         id: 'comp-1',
         name: 'Hackathon 2026',
-        user_id: 'user-1',
+        organization: { user_id: 'user-1' },
       };
       mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
       mockPrismaService.organization.findFirst.mockResolvedValue(null);
@@ -212,7 +222,7 @@ describe('TeamService', () => {
       const mockComp = {
         id: 'comp-1',
         name: 'Hackathon 2026',
-        user_id: 'user-1',
+        organization: { user_id: 'user-1' },
       };
       const mockTeams = [
         {
@@ -251,11 +261,11 @@ describe('TeamService', () => {
       });
     });
 
-    it('should return all teams when competition user_id matches user wallet address', async () => {
+    it('should return all teams when competition organization owner matches user wallet address', async () => {
       const mockComp = {
         id: 'comp-1',
         name: 'Hackathon 2026',
-        user_id: '0x1234567890123456789012345678901234567890',
+        organization: { user_id: '0x1234567890123456789012345678901234567890' },
       };
       const mockUser = {
         id: 'user-uuid-1',
@@ -274,7 +284,10 @@ describe('TeamService', () => {
       mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
       mockPrismaService.team.findMany.mockResolvedValue(mockTeams);
 
-      const result = await service.listAllByCompetitionId('comp-1', 'user-uuid-1');
+      const result = await service.listAllByCompetitionId(
+        'comp-1',
+        'user-uuid-1',
+      );
 
       expect(result).toEqual({
         data: mockTeams,
@@ -325,12 +338,13 @@ describe('TeamService', () => {
           description: 'Web3 hackathon',
           requirement: 'Open to all',
           category: 'Web3',
-          max_team_size: 4,
+          formation: '1-4 members',
           registration_window: new Date(),
           competition_window: new Date(),
           submission_deadline: new Date(),
           judging_review: new Date(),
           result_announcement: new Date(),
+          pirze_certificate_claim: new Date('2026-12-15'),
           guidebook_cid: 'Qm123',
           certificate_cid: 'Qm456',
           created_at: new Date('2026-01-01'),
@@ -370,6 +384,8 @@ describe('TeamService', () => {
 
       expect(result).toBeDefined();
       expect(result.data.competition.id).toBe('comp-1');
+      expect(result.data.competition.formation).toBe('1-4 members');
+      expect(result.data.competition.pirze_certificate_claim).toEqual(new Date('2026-12-15'));
       expect(result.data.team.id).toBe('team-1');
       expect(result.data.team_roles).toHaveLength(1);
       expect(result.data.team_codes).toHaveLength(1);
@@ -510,7 +526,7 @@ describe('TeamService', () => {
     });
   });
 
-    describe('members', () => {
+  describe('members', () => {
     it('should return team members when user is a team member', async () => {
       mockPrismaService.team.findFirst.mockResolvedValue({
         id: 'team-1',
@@ -585,7 +601,7 @@ describe('TeamService', () => {
         user_id: 'member-1',
         competition: {
           id: 'comp-1',
-          user_id: 'comp-owner-id',
+          organization: { user_id: 'comp-owner-id' },
         },
         team_roles: [
           {
@@ -610,7 +626,7 @@ describe('TeamService', () => {
         user_id: 'member-1',
         competition: {
           id: 'comp-1',
-          user_id: 'comp-owner-id',
+          organization: { user_id: 'comp-owner-id' },
         },
         team_roles: [
           {
@@ -624,6 +640,188 @@ describe('TeamService', () => {
 
       const result = await service.members('team-1', 'comp-owner-id');
       expect(result.data).toHaveLength(1);
+    });
+  });
+
+  describe('acceptInvite', () => {
+    it('should throw NotFoundException if invite code is invalid or used', async () => {
+      mockPrismaService.teamCode.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.acceptInvite('team-1', 'invite-1', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if user is already a member', async () => {
+      mockPrismaService.teamCode.findFirst.mockResolvedValue({
+        id: 'code-1',
+        code: 'COBALT-ABCDE',
+        team_id: 'team-1',
+        is_used: false,
+        team: { id: 'team-1', competition_id: 'comp-1' },
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue({
+        id: 'role-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+      });
+
+      await expect(
+        service.acceptInvite('team-1', 'code-1', 'user-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should mark code as used, create member role and generate participant signature', async () => {
+      const mockCode = {
+        id: 'code-1',
+        code: 'COBALT-ABCDE',
+        team_id: 'team-1',
+        is_used: false,
+        team: { id: 'team-1', competition_id: 'comp-1' },
+      };
+      const mockCreatedRole = {
+        id: 'role-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        competition_id: 'comp-1',
+        role: 'MEMBER',
+      };
+
+      mockPrismaService.teamCode.findFirst.mockResolvedValue(mockCode);
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.teamCode.update.mockResolvedValue({
+        ...mockCode,
+        is_used: true,
+      });
+      mockPrismaService.teamRole.create.mockResolvedValue(mockCreatedRole);
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      });
+      mockPrismaService.competition.findFirst.mockResolvedValue({
+        id: 'comp-1',
+        competition_id: '1',
+        certificate_cid: 'Qm123',
+      });
+      mockPrismaService.signatureCertificateParticipant.findFirst.mockResolvedValue(
+        null,
+      );
+      mockPrismaService.signatureCertificateParticipant.create.mockResolvedValue(
+        {},
+      );
+
+      const result = await service.acceptInvite('team-1', 'code-1', 'user-1');
+
+      expect(mockPrismaService.teamCode.update).toHaveBeenCalledWith({
+        where: { id: 'code-1' },
+        data: { is_used: true },
+      });
+      expect(mockPrismaService.teamRole.create).toHaveBeenCalledWith({
+        data: {
+          team_id: 'team-1',
+          user_id: 'user-1',
+          competition_id: 'comp-1',
+          role: 'MEMBER',
+        },
+      });
+      expect(
+        mockPrismaService.signatureCertificateParticipant.findFirst,
+      ).toHaveBeenCalledWith({
+        where: {
+          user_id: 'user-1',
+          competition_id: 'comp-1',
+          deleted_at: null,
+        },
+      });
+      expect(
+        mockPrismaService.signatureCertificateParticipant.create,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            user_id: 'user-1',
+            team_id: 'team-1',
+            competition_id: 'comp-1',
+            signature: expect.stringMatching(/^0x[a-fA-F0-9]{130}$/),
+          }),
+        }),
+      );
+      expect(result).toEqual({
+        data: mockCreatedRole,
+        message: 'Successfully joined team',
+      });
+    });
+
+    it('should update an existing participant signature when it differs', async () => {
+      mockPrismaService.teamCode.findFirst.mockResolvedValue({
+        id: 'code-1',
+        code: 'COBALT-ABCDE',
+        team_id: 'team-1',
+        is_used: false,
+        team: { id: 'team-1', competition_id: 'comp-1' },
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.teamCode.update.mockResolvedValue({});
+      mockPrismaService.teamRole.create.mockResolvedValue({ id: 'role-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      });
+      mockPrismaService.competition.findFirst.mockResolvedValue({
+        id: 'comp-1',
+        competition_id: '1',
+        certificate_cid: 'Qm123',
+      });
+      mockPrismaService.signatureCertificateParticipant.findFirst.mockResolvedValue(
+        {
+          id: 'sig-1',
+          signature: '0xdeadbeef',
+        },
+      );
+      mockPrismaService.signatureCertificateParticipant.update.mockResolvedValue(
+        {},
+      );
+
+      await service.acceptInvite('team-1', 'code-1', 'user-1');
+
+      expect(
+        mockPrismaService.signatureCertificateParticipant.create,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockPrismaService.signatureCertificateParticipant.update,
+      ).toHaveBeenCalledWith({
+        where: { id: 'sig-1' },
+          data: {
+            signature: expect.stringMatching(/^0x[a-fA-F0-9]{130}$/),
+            team_id: 'team-1',
+          },
+      });
+    });
+
+    it('should skip signature generation when user has no valid wallet_address', async () => {
+      mockPrismaService.teamCode.findFirst.mockResolvedValue({
+        id: 'code-1',
+        code: 'COBALT-ABCDE',
+        team_id: 'team-1',
+        is_used: false,
+        team: { id: 'team-1', competition_id: 'comp-1' },
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.teamCode.update.mockResolvedValue({});
+      mockPrismaService.teamRole.create.mockResolvedValue({ id: 'role-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        wallet_address: 'not-a-wallet',
+      });
+
+      await service.acceptInvite('team-1', 'code-1', 'user-1');
+
+      expect(mockPrismaService.competition.findFirst).not.toHaveBeenCalled();
+      expect(
+        mockPrismaService.signatureCertificateParticipant.create,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockPrismaService.signatureCertificateParticipant.update,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -886,6 +1084,56 @@ describe('TeamService', () => {
         errors: null,
       });
     });
+
+    it('should generate participant signature for the accepted user', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-id',
+        competition_id: 'comp-1',
+      });
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue({
+        id: 'req-1',
+        team_id: 'team-1',
+        user_id: 'user-1',
+        status: 'pending',
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.requestJoin.update.mockResolvedValue({
+        id: 'req-1',
+        status: 'accepted',
+      });
+      mockPrismaService.teamRole.create.mockResolvedValue({ id: 'role-2' });
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      });
+      mockPrismaService.competition.findFirst.mockResolvedValue({
+        id: 'comp-1',
+        competition_id: '1',
+        certificate_cid: 'Qm123',
+      });
+      mockPrismaService.signatureCertificateParticipant.findFirst.mockResolvedValue(
+        null,
+      );
+      mockPrismaService.signatureCertificateParticipant.create.mockResolvedValue(
+        {},
+      );
+
+      await service.acceptRequestJoin('team-1', 'req-1', 'leader-id');
+
+      expect(
+        mockPrismaService.signatureCertificateParticipant.create,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            user_id: 'user-1',
+            team_id: 'team-1',
+            competition_id: 'comp-1',
+            signature: expect.stringMatching(/^0x[a-fA-F0-9]{130}$/),
+          }),
+        }),
+      );
+    });
   });
 
   describe('rejectRequestJoin', () => {
@@ -945,5 +1193,3 @@ describe('TeamService', () => {
     });
   });
 });
-
-

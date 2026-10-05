@@ -100,9 +100,10 @@ export class TeamController {
   })
   @ApiResponse({
     status: 404,
-    description: 'Team or competition not found (or private team access restricted)',
+    description:
+      'Team or competition not found (or private team access restricted)',
   })
-    async getCompetitionByTeamId(
+  async getCompetitionByTeamId(
     @Param('teamId') teamId: string,
     @Req() request: OptionalAuthenticatedRequest,
   ) {
@@ -277,7 +278,8 @@ export class TeamController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Accept a join request and add the user as a team member (leader only)',
+    summary:
+      'Accept a join request and add the user as a team member (leader only)',
   })
   @ApiParam({
     name: 'teamId',
@@ -295,7 +297,8 @@ export class TeamController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Bad Request - join request already processed or user already a member',
+    description:
+      'Bad Request - join request already processed or user already a member',
   })
   @ApiResponse({
     status: 401,
@@ -361,4 +364,3 @@ export class TeamController {
     return this.teams.rejectRequestJoin(teamId, requestId, request.userId);
   }
 }
-

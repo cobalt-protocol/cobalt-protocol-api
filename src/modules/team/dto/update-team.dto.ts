@@ -20,8 +20,7 @@ export class UpdateTeamDto {
 
   @ApiPropertyOptional({
     description: 'Team description',
-    example:
-      'Building decentralized AI applications and zero-knowledge proofs',
+    example: 'Building decentralized AI applications and zero-knowledge proofs',
   })
   @IsOptional()
   @IsString()

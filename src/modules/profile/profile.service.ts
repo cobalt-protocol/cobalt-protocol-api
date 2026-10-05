@@ -43,7 +43,10 @@ function presentPublic(user: PublicProfile) {
     githubLink: user.social_media?.github_link ?? null,
     linkedinLink: user.social_media?.linkedin_link ?? null,
     skills: user.skills
-      ? user.skills.map((s) => ({ name: s.skill_name, level: 'Proficient' as const }))
+      ? user.skills.map((s) => ({
+          name: s.skill_name,
+          level: 'Proficient' as const,
+        }))
       : [],
   };
 }
@@ -105,7 +108,9 @@ export class ProfileService {
             where: { id: userId },
             data: {
               ...(dto.username !== undefined && { username: dto.username }),
-              ...(dto.email !== undefined && { email: dto.email.toLowerCase() }),
+              ...(dto.email !== undefined && {
+                email: dto.email.toLowerCase(),
+              }),
               ...(dto.location !== undefined && { location: dto.location }),
               ...(dto.institution !== undefined && {
                 institution: dto.institution,
@@ -131,7 +136,9 @@ export class ProfileService {
               where: { user_id: userId },
               data: {
                 ...(githubLink !== undefined && { github_link: githubLink }),
-                ...(linkedinLink !== undefined && { linkedin_link: linkedinLink }),
+                ...(linkedinLink !== undefined && {
+                  linkedin_link: linkedinLink,
+                }),
               },
             });
           } else {

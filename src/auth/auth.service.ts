@@ -81,14 +81,6 @@ export class AuthService {
         return 'organization';
       }
 
-      const competition = await this.prisma.competition.findFirst({
-        where: { user_id: userId },
-        select: { id: true },
-      });
-      if (competition) {
-        return 'organization';
-      }
-
       return 'user';
     } catch (dbError) {
       this.logger.warn(
@@ -100,9 +92,7 @@ export class AuthService {
 
   async generateNonce(dto?: RequestNonceDto): Promise<NonceResponse> {
     const nonce = randomBytes(16).toString('hex');
-    const walletAddress = dto?.walletAddress
-      ? dto.walletAddress
-      : undefined;
+    const walletAddress = dto?.walletAddress ? dto.walletAddress : undefined;
 
     let user: User | null = null;
 
@@ -385,7 +375,8 @@ export class AuthService {
 
     const role = await this.getUserRole(user.id);
     const { organizations, ...userWithoutOrganizations } = user;
-    const organization = organizations && organizations.length > 0 ? organizations[0] : null;
+    const organization =
+      organizations && organizations.length > 0 ? organizations[0] : null;
 
     return {
       data: {

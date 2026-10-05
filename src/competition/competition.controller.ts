@@ -1,5 +1,20 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CompetitionService } from './competition.service.js';
 import { CreateCompetitionTeamDto } from './dto/create-team.dto.js';
 
@@ -21,7 +36,8 @@ export class CompetitionController {
         data: [
           {
             id: '01J8Z9X0000000000000000001',
-            tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+            tx_hash:
+              '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
             name: 'Cobalt Hackathon 2026',
             category: 'Web3 & AI',
             description: 'Building decentralized AI applications',
@@ -63,7 +79,8 @@ export class CompetitionController {
   @Get('organization')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Get list of competitions owned by the authenticated organization user',
+    summary:
+      'Get list of competitions owned by the authenticated organization user',
   })
   @ApiBearerAuth()
   @ApiResponse({
@@ -74,7 +91,8 @@ export class CompetitionController {
         data: [
           {
             id: '01J8Z9X0000000000000000001',
-            tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+            tx_hash:
+              '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
             name: 'Cobalt Hackathon 2026',
             category: 'Web3 & AI',
             description: 'Building decentralized AI applications',
@@ -122,18 +140,19 @@ export class CompetitionController {
   @Get('listing-token-prize')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Get list of all listing token prizes',
+    summary: 'Get list of all listing tokens',
   })
   @ApiResponse({
     status: 200,
-    description: 'Listing token prizes retrieved successfully',
+    description: 'Listing tokens retrieved successfully',
     schema: {
       example: {
         data: [
           {
             id: '01J8Z9X0000000000000000001',
-            tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-            listing_token_prize_id: '1',
+            tx_hash:
+              '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+            listing_token_id: '1',
             token_address: '0x1234567890123456789012345678901234567890',
             is_active: true,
             created_at: '2026-09-23T00:00:00.000Z',
@@ -141,18 +160,18 @@ export class CompetitionController {
             deleted_at: null,
           },
         ],
-        message: 'Listing token prizes retrieved successfully',
+        message: 'Listing tokens retrieved successfully',
         errors: null,
       },
     },
   })
   @ApiResponse({
     status: 404,
-    description: 'No listing token prizes found',
+    description: 'No listing tokens found',
     schema: {
       example: {
         data: null,
-        message: 'No listing token prizes found',
+        message: 'No listing tokens found',
         errors: null,
       },
     },
@@ -192,62 +211,6 @@ export class CompetitionController {
     @Headers('authorization') authHeader?: string,
   ) {
     return this.competitionService.findMyTeamByCompetitionId(id, authHeader);
-  }
-
-  @Get(':id')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Get competition by ID',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Competition ID',
-    type: String,
-    example: '01J8Z9X0000000000000000001',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Competition retrieved successfully',
-    schema: {
-      example: {
-        data: {
-          id: '01J8Z9X0000000000000000001',
-          tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-          name: 'Cobalt Hackathon 2026',
-          category: 'Web3 & AI',
-          description: 'Building decentralized AI applications',
-          requirement: 'Open to all developers',
-          registration_window: '2026-10-01T00:00:00.000Z',
-          competition_window: '2026-10-15T00:00:00.000Z',
-          submission_deadline: '2026-11-01T00:00:00.000Z',
-          judging_review: '2026-11-05T00:00:00.000Z',
-          result_announcement: '2026-11-10T00:00:00.000Z',
-          pirze_certificate_claim: '2026-11-15T00:00:00.000Z',
-          certificate_cid: 'Qm123...',
-          guidebook_cid: 'Qm456...',
-          created_at: '2026-09-23T00:00:00.000Z',
-          updated_at: null,
-          deleted_at: null,
-          prize_winners: [],
-        },
-        message: 'Competition retrieved successfully',
-        errors: null,
-      },
-    },
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Competition not found',
-    schema: {
-      example: {
-        data: null,
-        message: 'Competition not found',
-        errors: null,
-      },
-    },
-  })
-  async findOne(@Param('id') id: string) {
-    return this.competitionService.findOne(id);
   }
 
   @Get(':id/token-prize')
@@ -291,6 +254,187 @@ export class CompetitionController {
   })
   async getTokenPrizeByCompetitionId(@Param('id') id: string) {
     return this.competitionService.getTokenPrizeByCompetitionId(id);
+  }
+
+  @Get(':id/signature-certificate-participant/:teamId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Get signature certificate participant record by competition ID and team ID for the authenticated user (live re-signed, with IPFS metadata CID)',
+    description:
+      'Requires competition ID (ULID or on-chain) and team ID. Validates that the team belongs to the competition, that the authenticated user is a member of the team, and that the team has a non-empty submission_project (400 if empty). Collects submission_project (title→title_project, description→description_project, submission_link, document_cid) + competition (name→title, description, certificate_cid→image as ipfs://<cid>) into a JSON, pins that JSON to Kubo IPFS (/api/v0/add) to obtain a metadata CID, then live re-signs hash keccak256(abi.encodePacked(address(this), msg.sender, competitionId, teamId, metadataCid)) which must match CompetitionManager.safeMintCertificateParticipant on-chain verification. Returns signature + cid/uri/metadata for frontend safeMintCertificateParticipant.',
+  })
+  @ApiBearerAuth()
+  @ApiParam({
+    name: 'id',
+    description: 'Competition ID (ULID or on-chain ID)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiParam({
+    name: 'teamId',
+    description: 'Team ID (ULID)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Signature certificate participant retrieved successfully (includes IPFS metadata CID for on-chain minting)',
+    schema: {
+      example: {
+        data: {
+          id: '01J8Z9X0000000000000000001',
+          signature:
+            '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b',
+          cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+          certificate_cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+          uri: 'ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+          metadata: {
+            title_project: 'My Awesome Project',
+            description_project: 'Project description from submission_project',
+            submission_link: 'https://github.com/org/repo',
+            document_cid: 'QmDocumentCid123',
+            document_uri: 'ipfs://QmDocumentCid123',
+            title: 'Cobalt Hackathon 2026',
+            description: 'Building decentralized AI applications',
+            image: 'ipfs://QmCertificateCid123',
+            certificate_cid: 'QmCertificateCid123',
+          },
+          user_id: '01J8Z9X0000000000000000002',
+          competition_id: '01J8Z9X0000000000000000001',
+          team_id: '01J8Z9X0000000000000000001',
+          created_at: '2026-09-24T00:00:00.000Z',
+          updated_at: null,
+          deleted_at: null,
+        },
+        message: 'Signature certificate participant retrieved successfully',
+        errors: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Team has not submitted any project (submission_project is empty) or IPFS pin failed',
+    schema: {
+      example: {
+        data: null,
+        message: 'Team has not submitted any project yet (submission_project is empty) — cannot generate participant certificate signature',
+        errors: 'Bad Request',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - missing or invalid Bearer token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user is not a member of the specified team',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition or team not found',
+  })
+  async findSignatureCertificateParticipant(
+    @Param('id') id: string,
+    @Param('teamId') teamId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    return this.competitionService.findSignatureCertificateParticipant(
+      id,
+      teamId,
+      authHeader,
+    );
+  }
+
+  @Get(':id/signature-certificate-winner/:winnerId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get signature certificate winner record (live re-signed) by competition ID and winner ID' })
+  @ApiBearerAuth()
+  @ApiParam({ name: 'id', description: 'Competition ID (ULID or on-chain ID)', type: String, example: '01J8Z9X0000000000000000001' })
+  @ApiParam({ name: 'winnerId', description: 'Winner ID — ULID or on-chain numeric winner_id', type: String, example: '1' })
+  @ApiResponse({ status: 200, description: 'Signature certificate winner retrieved successfully', schema: { example: { data: { id: '01J8Z9X0000000000000000001', signature: '0x1234...1b', user_id: '01J8Z9X0000000000000000002', competition_id: '01J8Z9X0000000000000000001', winner_id: '1', uri: 'ipfs://QmWinner123', created_at: '2026-09-24T00:00:00.000Z', updated_at: null, deleted_at: null }, message: 'Signature certificate winner retrieved successfully', errors: null } } })
+  @ApiResponse({ status: 401, description: 'Unauthorized - missing or invalid Bearer token' })
+  @ApiResponse({ status: 404, description: 'Competition, team, or winner not found' })
+  async findSignatureCertificateWinnerById(
+    @Param('id') id: string,
+    @Param('winnerId') winnerId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    return this.competitionService.findSignatureCertificateWinner(id, winnerId, authHeader);
+  }
+
+  @Get(':id/signature-certificate-winner')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get signature certificate winner record (live re-signed) by competition ID for the authenticated winner' })
+  @ApiBearerAuth()
+  @ApiParam({ name: 'id', description: 'Competition ID (ULID or on-chain ID)', type: String, example: '01J8Z9X0000000000000000001' })
+  @ApiResponse({ status: 200, description: 'Signature certificate winner retrieved successfully', schema: { example: { data: { id: '01J8Z9X0000000000000000001', signature: '0x1234...1b', user_id: '01J8Z9X0000000000000000002', competition_id: '01J8Z9X0000000000000000001', winner_id: '1', uri: 'ipfs://QmWinner123', created_at: '2026-09-24T00:00:00.000Z', updated_at: null, deleted_at: null }, message: 'Signature certificate winner retrieved successfully', errors: null } } })
+  @ApiResponse({ status: 401, description: 'Unauthorized - missing or invalid Bearer token' })
+  @ApiResponse({ status: 404, description: 'Competition, team, or winner not found' })
+  async findSignatureCertificateWinner(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    return this.competitionService.findSignatureCertificateWinner(id, undefined, authHeader);
+  }
+
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get competition by ID',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Competition ID',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Competition retrieved successfully',
+    schema: {
+      example: {
+        data: {
+          id: '01J8Z9X0000000000000000001',
+          tx_hash:
+            '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+          name: 'Cobalt Hackathon 2026',
+          category: 'Web3 & AI',
+          description: 'Building decentralized AI applications',
+          requirement: 'Open to all developers',
+          registration_window: '2026-10-01T00:00:00.000Z',
+          competition_window: '2026-10-15T00:00:00.000Z',
+          submission_deadline: '2026-11-01T00:00:00.000Z',
+          judging_review: '2026-11-05T00:00:00.000Z',
+          result_announcement: '2026-11-10T00:00:00.000Z',
+          pirze_certificate_claim: '2026-11-15T00:00:00.000Z',
+          certificate_cid: 'Qm123...',
+          guidebook_cid: 'Qm456...',
+          created_at: '2026-09-23T00:00:00.000Z',
+          updated_at: null,
+          deleted_at: null,
+          prize_winners: [],
+        },
+        message: 'Competition retrieved successfully',
+        errors: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found',
+    schema: {
+      example: {
+        data: null,
+        message: 'Competition not found',
+        errors: null,
+      },
+    },
+  })
+  async findOne(@Param('id') id: string) {
+    return this.competitionService.findOne(id);
   }
 
   @Post(':id/teams')

@@ -127,107 +127,107 @@ describe('SubmissionProjectService', () => {
     });
 
     it('should throw ForbiddenException if user is not in team_role and not team leader', async () => {
-    mockPrismaService.team.findFirst.mockResolvedValue({
-      id: 'team-1',
-      user_id: 'leader-user-id',
-      deleted_at: null,
-    });
-    mockPrismaService.user.findFirst.mockResolvedValue({
-      id: 'non-member-id',
-      wallet_address: '0x123',
-    });
-    mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-user-id',
+        deleted_at: null,
+      });
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'non-member-id',
+        wallet_address: '0x123',
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
 
-    await expect(
-      service.createSubmission('team-1', 'non-member-id', mockDto),
-    ).rejects.toThrow(ForbiddenException);
-  });
-
-  it('should create new submission when user is a team member in team_role', async () => {
-    mockPrismaService.team.findFirst.mockResolvedValue({
-      id: 'team-1',
-      user_id: 'leader-user-id',
-      deleted_at: null,
-    });
-    mockPrismaService.user.findFirst.mockResolvedValue({
-      id: 'member-user-id',
-      wallet_address: '0x456',
-    });
-    mockPrismaService.teamRole.findFirst.mockResolvedValue({
-      id: 'role-1',
-      team_id: 'team-1',
-      user_id: 'member-user-id',
-      role: 'member',
-      deleted_at: null,
-    });
-    mockPrismaService.submissionProject.findFirst.mockResolvedValue(null);
-    mockPrismaService.submissionProject.create.mockResolvedValue({
-      id: 'sub-1',
-      team_id: 'team-1',
-      ...mockDto,
-      created_at: new Date(),
-      updated_at: null,
-      deleted_at: null,
+      await expect(
+        service.createSubmission('team-1', 'non-member-id', mockDto),
+      ).rejects.toThrow(ForbiddenException);
     });
 
-    const result = await service.createSubmission(
-      'team-1',
-      'member-user-id',
-      mockDto,
-    );
-
-    expect(result.data.id).toBe('sub-1');
-    expect(result.message).toBe('Project submission created successfully');
-    expect(mockPrismaService.submissionProject.create).toHaveBeenCalledWith({
-      data: {
-        title: mockDto.title,
-        description: mockDto.description,
-        submission_link: mockDto.submission_link,
-        document_cid: mockDto.document_cid,
+    it('should create new submission when user is a team member in team_role', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-user-id',
+        deleted_at: null,
+      });
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'member-user-id',
+        wallet_address: '0x456',
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue({
+        id: 'role-1',
         team_id: 'team-1',
-      },
+        user_id: 'member-user-id',
+        role: 'member',
+        deleted_at: null,
+      });
+      mockPrismaService.submissionProject.findFirst.mockResolvedValue(null);
+      mockPrismaService.submissionProject.create.mockResolvedValue({
+        id: 'sub-1',
+        team_id: 'team-1',
+        ...mockDto,
+        created_at: new Date(),
+        updated_at: null,
+        deleted_at: null,
+      });
+
+      const result = await service.createSubmission(
+        'team-1',
+        'member-user-id',
+        mockDto,
+      );
+
+      expect(result.data.id).toBe('sub-1');
+      expect(result.message).toBe('Project submission created successfully');
+      expect(mockPrismaService.submissionProject.create).toHaveBeenCalledWith({
+        data: {
+          title: mockDto.title,
+          description: mockDto.description,
+          submission_link: mockDto.submission_link,
+          document_cid: mockDto.document_cid,
+          team_id: 'team-1',
+        },
+      });
+    });
+
+    it('should update existing submission when user is the team leader', async () => {
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        user_id: 'leader-user-id',
+        deleted_at: null,
+      });
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'leader-user-id',
+        wallet_address: '0x789',
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.submissionProject.findFirst.mockResolvedValue({
+        id: 'existing-sub-id',
+        team_id: 'team-1',
+        title: 'Old Title',
+      });
+      mockPrismaService.submissionProject.update.mockResolvedValue({
+        id: 'existing-sub-id',
+        team_id: 'team-1',
+        ...mockDto,
+        updated_at: new Date(),
+      });
+
+      const result = await service.createSubmission(
+        'team-1',
+        'leader-user-id',
+        mockDto,
+      );
+
+      expect(result.data.id).toBe('existing-sub-id');
+      expect(mockPrismaService.submissionProject.update).toHaveBeenCalledWith({
+        where: { id: 'existing-sub-id' },
+        data: {
+          title: mockDto.title,
+          description: mockDto.description,
+          submission_link: mockDto.submission_link,
+          document_cid: mockDto.document_cid,
+        },
+      });
     });
   });
-
-  it('should update existing submission when user is the team leader', async () => {
-    mockPrismaService.team.findFirst.mockResolvedValue({
-      id: 'team-1',
-      user_id: 'leader-user-id',
-      deleted_at: null,
-    });
-    mockPrismaService.user.findFirst.mockResolvedValue({
-      id: 'leader-user-id',
-      wallet_address: '0x789',
-    });
-    mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
-    mockPrismaService.submissionProject.findFirst.mockResolvedValue({
-      id: 'existing-sub-id',
-      team_id: 'team-1',
-      title: 'Old Title',
-    });
-    mockPrismaService.submissionProject.update.mockResolvedValue({
-      id: 'existing-sub-id',
-      team_id: 'team-1',
-      ...mockDto,
-      updated_at: new Date(),
-    });
-
-    const result = await service.createSubmission(
-      'team-1',
-      'leader-user-id',
-      mockDto,
-    );
-
-    expect(result.data.id).toBe('existing-sub-id');
-    expect(mockPrismaService.submissionProject.update).toHaveBeenCalledWith({
-      where: { id: 'existing-sub-id' },
-      data: {
-        title: mockDto.title,
-        description: mockDto.description,
-        submission_link: mockDto.submission_link,
-        document_cid: mockDto.document_cid,
-      },
-    });
-  });
-});
 });

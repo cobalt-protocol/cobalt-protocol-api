@@ -119,4 +119,3 @@ export class UpdateProfileDto {
   @Type(() => ProfileSkillDto)
   skills?: ProfileSkillDto[];
 }
-

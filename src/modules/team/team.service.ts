@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
@@ -14,6 +15,8 @@ import { UpdateTeamDto } from './dto/update-team.dto.js';
 
 @Injectable()
 export class TeamService {
+  private readonly logger = new Logger(TeamService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listPublic(query: TeamQueryDto) {
@@ -24,10 +27,7 @@ export class TeamService {
     if (competitionId) {
       const comp = await this.prisma.competition.findFirst({
         where: {
-          OR: [
-            { id: competitionId },
-            { competition_id: competitionId },
-          ],
+          OR: [{ id: competitionId }, { competition_id: competitionId }],
           deleted_at: null,
         },
       });
@@ -92,10 +92,7 @@ export class TeamService {
   async listPublicByCompetitionId(competitionId: string) {
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [
-          { id: competitionId },
-          { competition_id: competitionId },
-        ],
+        OR: [{ id: competitionId }, { competition_id: competitionId }],
         deleted_at: null,
       },
     });
@@ -144,11 +141,13 @@ export class TeamService {
   async listAllByCompetitionId(competitionId: string, userId: string) {
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [
-          { id: competitionId },
-          { competition_id: competitionId },
-        ],
+        OR: [{ id: competitionId }, { competition_id: competitionId }],
         deleted_at: null,
+      },
+      include: {
+        user: {
+          select: { id: true },
+        },
       },
     });
 
@@ -156,12 +155,12 @@ export class TeamService {
       throw new NotFoundException('Competition not found');
     }
 
+    const compOwnerUserId = competition.user?.id ?? null;
+
     let isOwner = false;
 
-    if (competition.user_id) {
-      const compUserIdLower = competition.user_id.toLowerCase();
-      const reqUserIdLower = userId.toLowerCase();
-      if (compUserIdLower === reqUserIdLower) {
+    if (compOwnerUserId) {
+      if (compOwnerUserId.toLowerCase() === userId.toLowerCase()) {
         isOwner = true;
       }
     }
@@ -180,8 +179,8 @@ export class TeamService {
         const dbUserIdLower = user.id.toLowerCase();
         const dbWalletLower = user.wallet_address.toLowerCase();
 
-        if (competition.user_id) {
-          const compUserIdLower = competition.user_id.toLowerCase();
+        if (compOwnerUserId) {
+          const compUserIdLower = compOwnerUserId.toLowerCase();
           if (
             compUserIdLower === dbUserIdLower ||
             compUserIdLower === dbWalletLower
@@ -302,11 +301,7 @@ export class TeamService {
         competition: {
           include: {
             user: {
-              include: {
-                organizations: {
-                  where: { deleted_at: null },
-                },
-              },
+              select: { id: true },
             },
           },
         },
@@ -333,7 +328,7 @@ export class TeamService {
 
     if (userId && (team as any).competition) {
       const competition = (team as any).competition;
-      const compUserId = competition.user_id;
+      const compUserId = competition.user?.id ?? null;
 
       if (compUserId && compUserId.toLowerCase() === userId.toLowerCase()) {
         isCompetitionOwner = true;
@@ -347,11 +342,6 @@ export class TeamService {
               { wallet_address: { equals: userId, mode: 'insensitive' } },
             ],
           },
-          include: {
-            organizations: {
-              where: { deleted_at: null },
-            },
-          },
         });
 
         if (user) {
@@ -363,26 +353,6 @@ export class TeamService {
             if (
               compUserIdLower === dbUserIdLower ||
               compUserIdLower === dbWalletLower
-            ) {
-              isCompetitionOwner = true;
-            }
-          }
-
-          if (!isCompetitionOwner && compUserId) {
-            const compUserOrg = await this.prisma.organization?.findFirst?.({
-              where: {
-                user_id: compUserId,
-                deleted_at: null,
-              },
-            });
-            if (
-              compUserOrg &&
-              (compUserOrg.user_id.toLowerCase() === dbUserIdLower ||
-                (user.organizations &&
-                  user.organizations.some(
-                    (org: any) =>
-                      org.id === compUserOrg.id || org.user_id === compUserOrg.user_id,
-                  )))
             ) {
               isCompetitionOwner = true;
             }
@@ -422,7 +392,7 @@ export class TeamService {
       const isMember =
         userId &&
         (team.user_id === userId ||
-          team.team_roles.some((role) => role.user_id === userId));
+          (team as any).team_roles?.some((role: any) => role.user_id === userId));
 
       if (!isMember) {
         throw new NotFoundException('Team not found');
@@ -430,7 +400,7 @@ export class TeamService {
     }
 
     return {
-      data: team.team_roles,
+      data: (team as any).team_roles,
     };
   }
 
@@ -513,12 +483,13 @@ export class TeamService {
           description: team.competition.description,
           requirement: team.competition.requirement,
           category: team.competition.category,
-          max_team_size: 5,
+          formation: team.competition.formation,
           registration_window: team.competition.registration_window,
           competition_window: team.competition.competition_window,
           submission_deadline: team.competition.submission_deadline,
           judging_review: team.competition.judging_review,
           result_announcement: team.competition.result_announcement,
+          pirze_certificate_claim: team.competition.pirze_certificate_claim,
           guidebook_cid: team.competition.guidebook_cid,
           certificate_cid: team.competition.certificate_cid,
           created_at: team.competition.created_at,
@@ -621,8 +592,8 @@ export class TeamService {
       throw new ConflictException('You are already a member of this team');
     }
 
-    const existingRequest = await this.prisma.requestJoin.findUnique({
-      where: { team_id_user_id: { team_id: team.id, user_id: userId } },
+    const existingRequest = await this.prisma.requestJoin.findFirst({
+      where: { team_id: team.id, user_id: userId },
     });
 
     if (
@@ -637,7 +608,7 @@ export class TeamService {
 
     const request = existingRequest
       ? await this.prisma.requestJoin.update({
-          where: { team_id_user_id: { team_id: team.id, user_id: userId } },
+          where: { id: existingRequest.id },
           data: { status: 'pending', deleted_at: null },
         })
       : await this.prisma.requestJoin.create({
@@ -822,10 +793,11 @@ export class TeamService {
         competition_id: competition.id,
         user_id: userId,
         skills_team: {
-          create: dto.skills_team
-            ?.map((s) => (typeof s === 'string' ? s.trim() : ''))
-            .filter((name) => name.length > 0)
-            .map((name) => ({ name })) ?? [],
+          create:
+            dto.skills_team
+              ?.map((s) => (typeof s === 'string' ? s.trim() : ''))
+              .filter((name) => name.length > 0)
+              .map((name) => ({ name })) ?? [],
         },
         requirements_team: {
           create: {

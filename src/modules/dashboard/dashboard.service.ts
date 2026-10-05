@@ -22,6 +22,7 @@ export class DashboardService {
                 category: true,
                 registration_window: true,
                 submission_deadline: true,
+                pirze_certificate_claim: true,
               },
             },
             _count: { select: { team_roles: true } },
@@ -63,6 +64,7 @@ export class DashboardService {
             category: true,
             registration_window: true,
             submission_deadline: true,
+            pirze_certificate_claim: true,
           },
         },
         request_joins: {
@@ -84,12 +86,15 @@ export class DashboardService {
     });
 
     const pendingRequests = teams
-      .filter((team) => {
-        const userReq = team.request_joins?.find((rj) => rj.user_id === userId);
-        return Boolean(userReq && userReq.status === 'pending');
-      })
       .map((team) => ({
-        requestId: team.request_joins?.[0]?.id || team.id,
+        team,
+        userReq: team.request_joins.find(
+          (rj) => rj.user_id === userId && rj.status === 'pending',
+        ),
+      }))
+      .filter(({ userReq }) => Boolean(userReq))
+      .map(({ team, userReq }) => ({
+        requestId: userReq?.id || team.id,
         teamId: team.id,
         teamName: team.name,
         competitionId: team.competition?.id || team.competition_id,
