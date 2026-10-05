@@ -1,5 +1,6 @@
 import {
-  ConflictException,
+  BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -7,9 +8,20 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'node:crypto';
-import { Prisma } from '../generated/prisma/client.js';
+import { getAddress, isAddress } from 'viem';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateCompetitionTeamDto } from './dto/create-team.dto.js';
+import {
+  deriveNumericTeamId,
+  getCompetitionContractAddress,
+  hashParticipantCertificate,
+  hashWinnerCertificate,
+  signHashWithSigner,
+} from '../common/utils/certificate-signature.util.js';
+import {
+  buildParticipantCertificateMetadata,
+  pinJsonToIpfs,
+} from '../common/utils/ipfs.util.js';
 
 @Injectable()
 export class CompetitionService {
@@ -66,7 +78,9 @@ export class CompetitionService {
           walletAddress = user.wallet_address;
         }
       } catch (dbError) {
-        this.logger.warn(`Could not lookup user during competition filter: ${dbError}`);
+        this.logger.warn(
+          `Could not lookup user during competition filter: ${dbError}`,
+        );
       }
     }
 
@@ -158,7 +172,7 @@ export class CompetitionService {
           },
         },
         {
-          nonce_certificate_participant: {
+          signature_certificate_participant: {
             some: {
               OR: [
                 ...(userId ? [{ user_id: userId }] : []),
@@ -179,7 +193,7 @@ export class CompetitionService {
           },
         },
         {
-          nonce_certificate_winner: {
+          signature_certificate_winner: {
             some: {
               OR: [
                 ...(userId ? [{ user_id: userId }] : []),
@@ -288,8 +302,8 @@ export class CompetitionService {
 
     const competitions = await this.prisma.competition.findMany({
       where: {
-        OR: userConditions,
         deleted_at: null,
+        OR: userConditions,
       },
       include: {
         prize_winners: {
@@ -315,7 +329,7 @@ export class CompetitionService {
   }
 
   async findListingTokenPrizes() {
-    const listingTokenPrizes = await this.prisma.listingTokenPrize.findMany({
+    const listingTokens = await this.prisma.listingToken.findMany({
       where: {
         deleted_at: null,
       },
@@ -324,108 +338,13 @@ export class CompetitionService {
       },
     });
 
-    if (!listingTokenPrizes || listingTokenPrizes.length === 0) {
-      throw new NotFoundException('No listing token prizes found');
+    if (!listingTokens || listingTokens.length === 0) {
+      throw new NotFoundException('No listing tokens found');
     }
 
     return {
-      data: listingTokenPrizes,
-      message: 'Listing token prizes retrieved successfully',
-      errors: null,
-    };
-  }
-
-  async findMyTeams(authHeader?: string) {
-    if (!authHeader) {
-      throw new UnauthorizedException('Missing authorization header');
-    }
-
-    const [type, token] = authHeader.split(' ');
-    if (type !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Invalid authorization header format');
-    }
-
-    let payload: any;
-    try {
-      payload = await this.jwtService.verifyAsync(token);
-    } catch {
-      throw new UnauthorizedException('Invalid or expired token');
-    }
-
-    const userId = payload.sub ?? null;
-    const walletAddress = payload.wallet_address ?? null;
-
-    if (!userId && !walletAddress) {
-      throw new UnauthorizedException('Invalid token payload');
-    }
-
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          ...(userId ? [{ id: userId }] : []),
-          ...(walletAddress
-            ? [
-                {
-                  wallet_address: {
-                    equals: walletAddress,
-                    mode: 'insensitive' as const,
-                  },
-                },
-              ]
-            : []),
-        ],
-      },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    const teams = await this.prisma.team.findMany({
-      where: {
-        OR: [
-          { user_id: user.id },
-          {
-            team_roles: {
-              some: {
-                user_id: user.id,
-              },
-            },
-          },
-        ],
-        deleted_at: null,
-      },
-      include: {
-        skills_suggestions: true,
-        team_codes: true,
-        team_roles: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                email: true,
-                wallet_address: true,
-                institution: true,
-                location: true,
-              },
-            },
-          },
-        },
-        competition: true,
-      },
-      orderBy: {
-        created_at: 'desc',
-      },
-    });
-
-    if (!teams || teams.length === 0) {
-      throw new NotFoundException('No teams found for the user');
-    }
-
-    return {
-      data: teams,
-      message: 'Teams retrieved successfully',
+      data: listingTokens,
+      message: 'Listing tokens retrieved successfully',
       errors: null,
     };
   }
@@ -500,12 +419,39 @@ export class CompetitionService {
               },
             },
           },
+          {
+            request_joins: {
+              some: {
+                user_id: user.id,
+                status: 'pending',
+                deleted_at: null,
+              },
+            },
+          },
         ],
       },
       include: {
-        skills_suggestions: true,
+        skills_team: true,
+        requirements_team: true,
         team_codes: true,
         team_roles: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                wallet_address: true,
+                institution: true,
+                location: true,
+              },
+            },
+          },
+        },
+        request_joins: {
+          where: {
+            deleted_at: null,
+          },
           include: {
             user: {
               select: {
@@ -551,7 +497,8 @@ export class CompetitionService {
         deleted_at: null,
       },
       include: {
-        skills_suggestions: true,
+        skills_team: true,
+        requirements_team: true,
         team_codes: true,
         team_roles: {
           include: {
@@ -584,7 +531,7 @@ export class CompetitionService {
   async findOne(id: string) {
     const competition = await this.prisma.competition.findFirst({
       where: {
-        id,
+        OR: [{ id }, { competition_id: id }],
         deleted_at: null,
       },
       include: {
@@ -649,13 +596,52 @@ export class CompetitionService {
     });
 
     if (!prizeWinners || prizeWinners.length === 0) {
-      throw new NotFoundException('No prize winners found for this competition');
+      throw new NotFoundException(
+        'No prize winners found for this competition',
+      );
     }
 
     return {
       data: prizeWinners,
       message: 'Prize winners retrieved successfully',
       errors: null,
+    };
+  }
+
+  private computeTokenPrize(
+    competition:
+      | { id: string; competition_id: string; fee_token_address?: string | null }
+      | null
+      | undefined,
+    prizeDeposits: { token_address: string; amount: { toString(): string } }[],
+  ) {
+    if (!competition) {
+      return null;
+    }
+
+    let totalPrizeBigInt = 0n;
+    for (const deposit of prizeDeposits) {
+      if (deposit.amount) {
+        const strVal = deposit.amount.toString();
+        const intPart = strVal.split('.')[0] || '0';
+        try {
+          totalPrizeBigInt += BigInt(intPart);
+        } catch {
+          totalPrizeBigInt += BigInt(Math.floor(Number(strVal)));
+        }
+      }
+    }
+
+    const tokenAddress =
+      prizeDeposits.find((deposit) => Boolean(deposit.token_address))
+        ?.token_address || competition.fee_token_address || null;
+
+    return {
+      competition_id: competition.id,
+      onchain_competition_id: competition.competition_id,
+      token_address: tokenAddress,
+      total_prize: totalPrizeBigInt.toString(),
+      prize_deposits_count: prizeDeposits.length,
     };
   }
 
@@ -682,34 +668,227 @@ export class CompetitionService {
       },
     });
 
-    let totalPrizeBigInt = 0n;
-    for (const deposit of prizeDeposits) {
-      if (deposit.amount) {
-        const strVal = deposit.amount.toString();
-        const intPart = strVal.split('.')[0] || '0';
-        try {
-          totalPrizeBigInt += BigInt(intPart);
-        } catch {
-          totalPrizeBigInt += BigInt(Math.floor(Number(strVal)));
-        }
-      }
-    }
-
-    const tokenAddress =
-      prizeDeposits.find((d) => Boolean(d.token_address))?.token_address ||
-      competition.token_address;
-
     return {
-      data: {
-        competition_id: competition.id,
-        onchain_competition_id: competition.competition_id,
-        token_address: tokenAddress,
-        total_prize: totalPrizeBigInt.toString(),
-        prize_deposits_count: prizeDeposits.length,
-      },
+      data: this.computeTokenPrize(competition, prizeDeposits),
       message: 'Token prize retrieved successfully',
       errors: null,
     };
+  }
+
+  async findSignatureCertificateParticipant(
+    id: string,
+    teamId: string,
+    authHeader: string,
+  ) {
+    if (!teamId) {
+      throw new BadRequestException('teamId is required — use GET :id/signature-certificate-participant/:teamId');
+    }
+    if (!authHeader) {
+      throw new UnauthorizedException('Missing authorization header');
+    }
+
+    const [type, token] = authHeader.split(' ');
+    if (type !== 'Bearer' || !token) {
+      throw new UnauthorizedException('Invalid authorization header format');
+    }
+
+    let payload: any;
+    try {
+      payload = await this.jwtService.verifyAsync(token);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    const userId = payload.sub ?? null;
+    const walletAddress = payload.wallet_address ?? null;
+
+    if (!userId && !walletAddress) {
+      throw new UnauthorizedException('Invalid token payload');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(userId ? [{ id: userId }] : []),
+          ...(walletAddress
+            ? [
+                {
+                  wallet_address: {
+                    equals: walletAddress,
+                    mode: 'insensitive' as const,
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [{ id }, { competition_id: id }],
+        deleted_at: null,
+      },
+    });
+
+    if (!competition) {
+      throw new NotFoundException('Competition not found');
+    }
+
+    if (!user.wallet_address || !isAddress(user.wallet_address)) {
+      throw new BadRequestException('Authenticated user has no valid wallet address');
+    }
+    const team: any = await (async () => {
+      const found = await this.prisma.team.findFirst({
+        where: { id: teamId, competition_id: competition.id, deleted_at: null },
+        include: { team_roles: true } as any,
+      });
+      if (!found) throw new NotFoundException('Team not found for this competition');
+      const isMember =
+        found.user_id === user.id ||
+        (Array.isArray((found as any).team_roles) && (found as any).team_roles.some((r: any) => r.user_id === user.id));
+      if (isMember) return found;
+      const membership = await this.prisma.team.findFirst({
+        where: {
+          id: teamId,
+          competition_id: competition.id,
+          deleted_at: null,
+          OR: [{ user_id: user.id }, { team_roles: { some: { user_id: user.id } } }],
+        },
+      });
+      if (!membership) throw new ForbiddenException('You are not a member of the specified team');
+      return membership;
+    })();
+    if (competition.competition_id === null || competition.competition_id === undefined || String(competition.competition_id).trim() === '') {
+      throw new BadRequestException('Competition is not yet indexed on-chain (competition_id is null). Minting is not available yet.');
+    }
+    let onchainCompId: bigint;
+    try { onchainCompId = BigInt(competition.competition_id); } catch { throw new BadRequestException(`Invalid on-chain competition_id: ${competition.competition_id}`); }
+    if (onchainCompId <= 0n) throw new BadRequestException(`Invalid on-chain competition_id: ${competition.competition_id}`);
+
+    // ── Validate submission_project exists for this team ───────────────────
+    // Required: table submission_project for team must not be empty, otherwise 400.
+    const submission: any = await (this.prisma as any).submissionProject?.findFirst?.({
+      where: { team_id: team.id, deleted_at: null },
+    }) ?? null;
+
+    if (!submission) {
+      throw new BadRequestException(
+        'Team has not submitted any project yet (submission_project is empty) — cannot generate participant certificate signature',
+      );
+    }
+
+    // Build JSON metadata from submission_project + competition
+    // - title_project        <- submission_project.title
+    // - description_project  <- submission_project.description
+    // - submission_link      <- submission_project.submission_link
+    // - document_cid         <- submission_project.document_cid
+    // - title                <- competition.name
+    // - description          <- competition.description
+    // - image                <- ipfs:// + competition.certificate_cid
+    const metadata = buildParticipantCertificateMetadata({
+      submission: {
+        title: submission.title,
+        description: submission.description ?? null,
+        submission_link: submission.submission_link,
+        document_cid: submission.document_cid,
+      },
+      competition: {
+        name: competition.name,
+        description: competition.description,
+        certificate_cid: competition.certificate_cid ?? '',
+      },
+    });
+
+    // Pin metadata JSON to IPFS to obtain CID (raw, without ipfs:// prefix)
+    let metadataCidRaw: string;
+    try {
+      metadataCidRaw = await pinJsonToIpfs(metadata);
+    } catch (e: any) {
+      this.logger.error(`Failed to pin participant certificate metadata to IPFS: ${e?.message || e}`);
+      throw new BadRequestException(e?.message || 'Failed to pin certificate metadata to IPFS');
+    }
+
+    let contractChecksum: `0x${string}`;
+    try { contractChecksum = getCompetitionContractAddress(); } catch (e: any) { throw new BadRequestException(e?.message || 'Invalid COMPETITION_CONTRACT'); }
+    const participantChecksum = getAddress(user.wallet_address);
+    const numericTeamId = deriveNumericTeamId(team.id);
+    // hash uses the newly pinned metadata CID (raw) — matches safeMintCertificateParticipant(_cid) on-chain
+    const msgHash = hashParticipantCertificate(contractChecksum, participantChecksum, onchainCompId, numericTeamId, metadataCidRaw);
+    let signature: `0x${string}`;
+    try { signature = await signHashWithSigner(msgHash); } catch (e: any) { this.logger.error(`Failed to sign participant certificate hash: ${e}`); throw new BadRequestException('Failed to generate participant certificate signature'); }
+    const existingSig: any = await this.prisma.signatureCertificateParticipant.findFirst({ where: { user_id: user.id, competition_id: competition.id, team_id: team.id, deleted_at: null } } as any);
+    let signatureCertificateParticipant: any;
+    if (!existingSig) {
+      signatureCertificateParticipant = await this.prisma.signatureCertificateParticipant.create({ data: { signature, user_id: user.id, competition_id: competition.id, team_id: team.id } });
+    } else if (existingSig.signature !== signature || existingSig.team_id !== team.id) {
+      signatureCertificateParticipant = await this.prisma.signatureCertificateParticipant.update({ where: { id: existingSig.id }, data: { signature, team_id: team.id } });
+    } else { signatureCertificateParticipant = existingSig; }
+    const uri = metadataCidRaw ? `ipfs://${metadataCidRaw}` : '';
+    return {
+      data: {
+        ...signatureCertificateParticipant,
+        // expose newly generated CID / metadata for frontend minting
+        cid: metadataCidRaw,
+        uri,
+        metadata,
+        certificate_cid: metadataCidRaw,
+      },
+      message: 'Signature certificate participant retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async findSignatureCertificateWinner(id: string, winnerIdParam: string | undefined, authHeader?: string) {
+    if (!authHeader) throw new UnauthorizedException('Missing authorization header');
+    const [type, token] = authHeader.split(' ');
+    if (type !== 'Bearer' || !token) throw new UnauthorizedException('Invalid authorization header format');
+    let payload: any;
+    try { payload = await this.jwtService.verifyAsync(token); } catch { throw new UnauthorizedException('Invalid or expired token'); }
+    const userId = payload.sub ?? null;
+    const walletAddress = payload.wallet_address ?? null;
+    if (!userId && !walletAddress) throw new UnauthorizedException('Invalid token payload');
+    const user = await this.prisma.user.findFirst({ where: { OR: [...(userId ? [{ id: userId }] : []), ...(walletAddress ? [{ wallet_address: { equals: walletAddress, mode: 'insensitive' as const } }] : [])] } });
+    if (!user) throw new UnauthorizedException('User not found');
+    const competition = await this.prisma.competition.findFirst({ where: { OR: [{ id }, { competition_id: id }], deleted_at: null } });
+    if (!competition) throw new NotFoundException('Competition not found');
+    if (!user.wallet_address || !isAddress(user.wallet_address)) throw new BadRequestException('Authenticated user has no valid wallet address');
+    const team = await this.prisma.team.findFirst({ where: { competition_id: competition.id, deleted_at: null, OR: [{ user_id: user.id }, { team_roles: { some: { user_id: user.id } } }] }, orderBy: { created_at: 'asc' } });
+    if (!team) throw new NotFoundException('You have no team for this competition — join or create a team first');
+    let onchainWinnerId: bigint | null = null;
+    let certificateCidRaw = '';
+    if (winnerIdParam) {
+      let big: bigint | null = null; try { big = BigInt(winnerIdParam); } catch { big = null; }
+      const prizeWinner: any = await this.prisma.prizeWinner.findFirst({ where: { OR: [{ id: winnerIdParam }, ...(big !== null ? [{ winner_id: big } as any] : [])], competition_id: competition.id, deleted_at: null }, include: { winner: true } as any });
+      if (!prizeWinner) throw new NotFoundException('Winner not found for this competition');
+      onchainWinnerId = BigInt(prizeWinner.winner_id);
+      certificateCidRaw = prizeWinner.certificate_cid ?? '';
+      if ((prizeWinner as any).winner && (prizeWinner as any).winner.user_id !== user.id) throw new BadRequestException('You are not the winner for the specified winner_id');
+    } else {
+      const winnerLink: any = await this.prisma.winner.findFirst({ where: { user_id: user.id, deleted_at: null }, include: { prize_winner: true } as any });
+      if (winnerLink && (winnerLink as any).prize_winner && (winnerLink as any).prize_winner.competition_id === competition.id) {
+        const pw = (winnerLink as any).prize_winner; onchainWinnerId = BigInt(pw.winner_id); certificateCidRaw = pw.certificate_cid ?? '';
+      }
+      if (onchainWinnerId === null) throw new NotFoundException('You are not a winner for this competition');
+    }
+    if (onchainWinnerId === 0n) throw new BadRequestException('Invalid winnerId (0)');
+    let contractChecksum: `0x${string}`;
+    try { contractChecksum = getCompetitionContractAddress(); } catch (e: any) { throw new BadRequestException(e?.message || 'Invalid COMPETITION_CONTRACT'); }
+    const participantChecksum = getAddress(user.wallet_address);
+    const uri = certificateCidRaw ? `ipfs://${certificateCidRaw}` : '';
+    const msgHash = hashWinnerCertificate(contractChecksum, participantChecksum, onchainWinnerId, uri);
+    let signature: `0x${string}`;
+    try { signature = await signHashWithSigner(msgHash); } catch (e: any) { this.logger.error(`Failed to sign winner certificate hash: ${e}`); throw new BadRequestException('Failed to generate winner certificate signature'); }
+    const existingWinnerSig: any = await this.prisma.signatureCertificateWinner.findFirst({ where: { user_id: user.id, competition_id: competition.id, deleted_at: null } });
+    let winnerSig: any;
+    if (!existingWinnerSig) winnerSig = await this.prisma.signatureCertificateWinner.create({ data: { signature, user_id: user.id, competition_id: competition.id, team_id: team.id } });
+    else if (existingWinnerSig.signature !== signature || existingWinnerSig.team_id !== team.id) winnerSig = await this.prisma.signatureCertificateWinner.update({ where: { id: existingWinnerSig.id }, data: { signature, team_id: team.id } });
+    else winnerSig = existingWinnerSig;
+    return { data: { ...winnerSig, winner_id: onchainWinnerId.toString(), uri }, message: 'Signature certificate winner retrieved successfully', errors: null };
   }
 
   async createTeam(
@@ -773,29 +952,10 @@ export class CompetitionService {
       throw new NotFoundException('Competition not found');
     }
 
-    const existingRole = await this.prisma.teamRole.findFirst({
-      where: {
-        user_id: user.id,
-        team: {
-          competition_id: competition.id,
-        },
-        deleted_at: null,
-      },
-    });
-
-    if (existingRole) {
-      throw new ConflictException(
-        'You are already registered in a team for this competition',
-      );
-    }
-
-    const isPublic = Boolean(dto.visibility);
-    const teamCodeStr = isPublic
+    const isPrivate = !dto.visibility;
+    const teamCodeStr = isPrivate
       ? `COBALT-${randomBytes(5).toString('hex').toUpperCase()}`
       : null;
-
-    const skillsList =
-      dto.skills ?? dto.skills_suggestion ?? dto.skills_suggestions ?? [];
 
     const teamName =
       dto.name && dto.name.trim()
@@ -806,17 +966,23 @@ export class CompetitionService {
       const team = await this.prisma.team.create({
         data: {
           name: teamName,
-          visibility: isPublic,
+          visibility: Boolean(dto.visibility),
           description: dto.description ? dto.description.trim() : '',
           competition_id: competition.id,
           user_id: user.id,
-          skills_suggestions: {
-            create: skillsList
-              .map((s) => (typeof s === 'string' ? s.trim() : ''))
-              .filter((name) => name.length > 0)
-              .map((name) => ({ name })),
+          skills_team: {
+            create:
+              dto.skills_team
+                ?.map((s) => (typeof s === 'string' ? s.trim() : ''))
+                .filter((name) => name.length > 0)
+                .map((name) => ({ name })) ?? [],
           },
-          ...(isPublic && teamCodeStr
+          requirements_team: {
+            create: {
+              requirement: dto.description ? dto.description.trim() : '',
+            },
+          },
+          ...(isPrivate && teamCodeStr
             ? {
                 team_codes: {
                   create: [
@@ -837,7 +1003,8 @@ export class CompetitionService {
           },
         },
         include: {
-          skills_suggestions: true,
+          skills_team: true,
+          requirements_team: true,
           team_codes: true,
           team_roles: true,
         },
@@ -853,7 +1020,8 @@ export class CompetitionService {
           user_id: team.user_id,
           team_code: teamCodeStr,
           team_codes: team.team_codes,
-          skills_suggestions: team.skills_suggestions,
+          skills_team: team.skills_team,
+          requirements_team: team.requirements_team,
           created_at: team.created_at,
           updated_at: team.updated_at,
         },
@@ -861,16 +1029,8 @@ export class CompetitionService {
         errors: null,
       };
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          'You are already registered in a team for this competition',
-        );
-      }
+      this.logger.error(`Failed to create team: ${error}`);
       throw error;
     }
   }
 }
-

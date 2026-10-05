@@ -182,7 +182,7 @@ describe('AuthService', () => {
       expect(result.data.user.role).toBe('organization');
     });
 
-    it('should return user profile with role "organization" when user has created a competition', async () => {
+    it('should return user profile with role "user" when user has no organization (even if they own a competition)', async () => {
       mockJwtService.verifyAsync.mockResolvedValue({
         sub: mockUser.id,
         wallet_address: mockUser.wallet_address,
@@ -195,7 +195,7 @@ describe('AuthService', () => {
 
       const result = await service.getMe('Bearer valid-token');
 
-      expect(result.data.user.role).toBe('organization');
+      expect(result.data.user.role).toBe('user');
     });
   });
 });

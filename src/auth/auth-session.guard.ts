@@ -21,9 +21,7 @@ export class AuthSessionGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const match = /^Bearer\s+(.+)$/i.exec(
-      request.headers.authorization ?? '',
-    );
+    const match = /^Bearer\s+(.+)$/i.exec(request.headers.authorization ?? '');
 
     if (!match) {
       throw new UnauthorizedException('A valid session is required');
@@ -50,11 +48,10 @@ export class OptionalAuthSessionGuard implements CanActivate {
   constructor(private readonly jwtService: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request =
-      context.switchToHttp().getRequest<OptionalAuthenticatedRequest>();
-    const match = /^Bearer\s+(.+)$/i.exec(
-      request.headers.authorization ?? '',
-    );
+    const request = context
+      .switchToHttp()
+      .getRequest<OptionalAuthenticatedRequest>();
+    const match = /^Bearer\s+(.+)$/i.exec(request.headers.authorization ?? '');
 
     if (!match) {
       return true;

@@ -56,4 +56,3 @@ describe('NoCacheInterceptor', () => {
     expect(removeHeaderMock).toHaveBeenCalledWith('ETag');
   });
 });
-

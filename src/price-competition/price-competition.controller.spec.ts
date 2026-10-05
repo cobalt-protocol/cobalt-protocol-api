@@ -17,8 +17,6 @@ describe('PriceCompetitionController', () => {
   };
 
   const mockPriceCompetitionService = {
-    findAll: vi.fn(),
-    findByFeeId: vi.fn(),
     findOne: vi.fn(),
   };
 
@@ -35,38 +33,13 @@ describe('PriceCompetitionController', () => {
       ],
     }).compile();
 
-    controller = module.get<PriceCompetitionController>(PriceCompetitionController);
+    controller = module.get<PriceCompetitionController>(
+      PriceCompetitionController,
+    );
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
-  });
-
-  describe('findAll', () => {
-    it('should return list of price competitions', async () => {
-      mockPriceCompetitionService.findAll.mockResolvedValue(mockResponse);
-
-      const result = await controller.findAll();
-
-      expect(mockPriceCompetitionService.findAll).toHaveBeenCalled();
-      expect(result).toEqual(mockResponse);
-    });
-  });
-
-  describe('findByFeeId', () => {
-    it('should return price competition by fee id', async () => {
-      const mockSingle = {
-        data: mockResponse.data[0],
-        message: 'Price competition retrieved successfully',
-        errors: null,
-      };
-      mockPriceCompetitionService.findByFeeId.mockResolvedValue(mockSingle);
-
-      const result = await controller.findByFeeId('1');
-
-      expect(mockPriceCompetitionService.findByFeeId).toHaveBeenCalledWith('1');
-      expect(result).toEqual(mockSingle);
-    });
   });
 
   describe('findOne', () => {

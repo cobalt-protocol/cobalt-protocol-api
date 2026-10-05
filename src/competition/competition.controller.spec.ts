@@ -36,12 +36,12 @@ describe('CompetitionController', () => {
   const mockCompetitionService = {
     findAll: vi.fn(),
     findListingTokenPrizes: vi.fn(),
-    findMyTeams: vi.fn(),
     findMyTeamByCompetitionId: vi.fn(),
     findTeamsByCompetitionId: vi.fn(),
     findOne: vi.fn(),
     findPrizeWinners: vi.fn(),
     getTokenPrizeByCompetitionId: vi.fn(),
+    findSignatureCertificateParticipant: vi.fn(),
     createTeam: vi.fn(),
   };
 
@@ -77,7 +77,9 @@ describe('CompetitionController', () => {
 
       const result = await controller.findAll('Bearer sample-token');
 
-      expect(mockCompetitionService.findAll).toHaveBeenCalledWith('Bearer sample-token');
+      expect(mockCompetitionService.findAll).toHaveBeenCalledWith(
+        'Bearer sample-token',
+      );
       expect(result).toEqual(mockCompetitionResponse);
     });
 
@@ -86,7 +88,9 @@ describe('CompetitionController', () => {
         new NotFoundException('No competitions found'),
       );
 
-      await expect(controller.findAll('Bearer sample-token')).rejects.toThrow(NotFoundException);
+      await expect(controller.findAll('Bearer sample-token')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -97,20 +101,29 @@ describe('CompetitionController', () => {
         message: 'Organization competitions retrieved successfully',
         errors: null,
       };
-      mockCompetitionService.findOrganizationCompetitions = vi.fn().mockResolvedValue(mockOrgResponse);
+      mockCompetitionService.findOrganizationCompetitions = vi
+        .fn()
+        .mockResolvedValue(mockOrgResponse);
 
-      const result = await controller.findOrganizationCompetitions('Bearer valid-token');
+      const result =
+        await controller.findOrganizationCompetitions('Bearer valid-token');
 
-      expect(mockCompetitionService.findOrganizationCompetitions).toHaveBeenCalledWith('Bearer valid-token');
+      expect(
+        mockCompetitionService.findOrganizationCompetitions,
+      ).toHaveBeenCalledWith('Bearer valid-token');
       expect(result).toEqual(mockOrgResponse);
     });
 
     it('should throw UnauthorizedException when auth header is missing or invalid', async () => {
-      mockCompetitionService.findOrganizationCompetitions = vi.fn().mockRejectedValue(
-        new UnauthorizedException('Missing authorization header'),
-      );
+      mockCompetitionService.findOrganizationCompetitions = vi
+        .fn()
+        .mockRejectedValue(
+          new UnauthorizedException('Missing authorization header'),
+        );
 
-      await expect(controller.findOrganizationCompetitions('')).rejects.toThrow(UnauthorizedException);
+      await expect(controller.findOrganizationCompetitions('')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -125,7 +138,9 @@ describe('CompetitionController', () => {
 
       const result = await controller.findOne('01J8Z9X0000000000000000001');
 
-      expect(mockCompetitionService.findOne).toHaveBeenCalledWith('01J8Z9X0000000000000000001');
+      expect(mockCompetitionService.findOne).toHaveBeenCalledWith(
+        '01J8Z9X0000000000000000001',
+      );
       expect(result).toEqual(mockSingleResponse);
     });
 
@@ -134,42 +149,9 @@ describe('CompetitionController', () => {
         new NotFoundException('Competition not found'),
       );
 
-      await expect(controller.findOne('invalid-id')).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('findPrizeWinners', () => {
-    it('should return prize winners by competition id', async () => {
-      const mockPrizeWinnersResponse = {
-        data: [
-          {
-            id: '01J8Z9X0000000000000000002',
-            winner_id: '1',
-            category: '1st Place',
-            amount: '1000',
-            certificate_cid: 'QmWinnerCert123',
-            competition_id: '01J8Z9X0000000000000000001',
-          },
-        ],
-        message: 'Prize winners retrieved successfully',
-        errors: null,
-      };
-      mockCompetitionService.findPrizeWinners.mockResolvedValue(mockPrizeWinnersResponse);
-
-      const result = await controller.findPrizeWinners('01J8Z9X0000000000000000001');
-
-      expect(mockCompetitionService.findPrizeWinners).toHaveBeenCalledWith(
-        '01J8Z9X0000000000000000001',
+      await expect(controller.findOne('invalid-id')).rejects.toThrow(
+        NotFoundException,
       );
-      expect(result).toEqual(mockPrizeWinnersResponse);
-    });
-
-    it('should throw NotFoundException if service throws NotFoundException', async () => {
-      mockCompetitionService.findPrizeWinners.mockRejectedValue(
-        new NotFoundException('No prize winners found for this competition'),
-      );
-
-      await expect(controller.findPrizeWinners('invalid-id')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -190,23 +172,25 @@ describe('CompetitionController', () => {
         mockTokenPrizeResponse,
       );
 
-      const result = await controller.getTokenPrizeByCompetitionId('01J8Z9X0000000000000000001');
-
-      expect(mockCompetitionService.getTokenPrizeByCompetitionId).toHaveBeenCalledWith(
+      const result = await controller.getTokenPrizeByCompetitionId(
         '01J8Z9X0000000000000000001',
       );
+
+      expect(
+        mockCompetitionService.getTokenPrizeByCompetitionId,
+      ).toHaveBeenCalledWith('01J8Z9X0000000000000000001');
       expect(result).toEqual(mockTokenPrizeResponse);
     });
   });
 
   describe('findListingTokenPrizes', () => {
-    it('should return list of listing token prizes', async () => {
-      const mockListingTokenPrizesResponse = {
+    it('should return list of listing tokens', async () => {
+      const mockListingTokensResponse = {
         data: [
           {
             id: '01J8Z9X0000000000000000001',
             tx_hash: '0x1234567890abcdef',
-            listing_token_prize_id: 1n,
+            listing_token_id: 1n,
             token_address: '0x1234567890123456789012345678901234567890',
             is_active: true,
             created_at: new Date('2026-09-23'),
@@ -214,56 +198,25 @@ describe('CompetitionController', () => {
             deleted_at: null,
           },
         ],
-        message: 'Listing token prizes retrieved successfully',
+        message: 'Listing tokens retrieved successfully',
         errors: null,
       };
       mockCompetitionService.findListingTokenPrizes.mockResolvedValue(
-        mockListingTokenPrizesResponse,
+        mockListingTokensResponse,
       );
 
       const result = await controller.findListingTokenPrizes();
 
       expect(mockCompetitionService.findListingTokenPrizes).toHaveBeenCalled();
-      expect(result).toEqual(mockListingTokenPrizesResponse);
+      expect(result).toEqual(mockListingTokensResponse);
     });
 
     it('should throw NotFoundException if service throws NotFoundException', async () => {
       mockCompetitionService.findListingTokenPrizes.mockRejectedValue(
-        new NotFoundException('No listing token prizes found'),
+        new NotFoundException('No listing tokens found'),
       );
 
-      await expect(controller.findListingTokenPrizes()).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('findMyTeams', () => {
-    it('should return teams for the authenticated user', async () => {
-      const mockTeamsResponse = {
-        data: [
-          {
-            id: 'team-1',
-            name: 'Cyber Warriors',
-            visibility: true,
-            user_id: 'user-1',
-          },
-        ],
-        message: 'Teams retrieved successfully',
-        errors: null,
-      };
-      mockCompetitionService.findMyTeams.mockResolvedValue(mockTeamsResponse);
-
-      const result = await controller.findMyTeams('Bearer valid-token');
-
-      expect(mockCompetitionService.findMyTeams).toHaveBeenCalledWith('Bearer valid-token');
-      expect(result).toEqual(mockTeamsResponse);
-    });
-
-    it('should throw NotFoundException if service throws NotFoundException when no teams found', async () => {
-      mockCompetitionService.findMyTeams.mockRejectedValue(
-        new NotFoundException('No teams found for the user'),
-      );
-
-      await expect(controller.findMyTeams('Bearer valid-token')).rejects.toThrow(
+      await expect(controller.findListingTokenPrizes()).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -282,38 +235,19 @@ describe('CompetitionController', () => {
         message: 'Team retrieved successfully',
         errors: null,
       };
-      mockCompetitionService.findMyTeamByCompetitionId.mockResolvedValue(mockTeamResponse);
+      mockCompetitionService.findMyTeamByCompetitionId.mockResolvedValue(
+        mockTeamResponse,
+      );
 
-      const result = await controller.findMyTeamByCompetitionId('comp-1', 'Bearer valid-token');
-
-      expect(mockCompetitionService.findMyTeamByCompetitionId).toHaveBeenCalledWith(
+      const result = await controller.findMyTeamByCompetitionId(
         'comp-1',
         'Bearer valid-token',
       );
+
+      expect(
+        mockCompetitionService.findMyTeamByCompetitionId,
+      ).toHaveBeenCalledWith('comp-1', 'Bearer valid-token');
       expect(result).toEqual(mockTeamResponse);
-    });
-  });
-
-  describe('findTeamsByCompetitionId', () => {
-    it('should return public teams for a competition', async () => {
-      const mockTeamsResponse = {
-        data: [
-          {
-            id: 'team-1',
-            name: 'Public Team 1',
-            visibility: true,
-            competition_id: 'comp-1',
-          },
-        ],
-        message: 'Teams retrieved successfully',
-        errors: null,
-      };
-      mockCompetitionService.findTeamsByCompetitionId.mockResolvedValue(mockTeamsResponse);
-
-      const result = await controller.findTeamsByCompetitionId('comp-1');
-
-      expect(mockCompetitionService.findTeamsByCompetitionId).toHaveBeenCalledWith('comp-1');
-      expect(result).toEqual(mockTeamsResponse);
     });
   });
 
@@ -329,7 +263,7 @@ describe('CompetitionController', () => {
           user_id: 'user-1',
           team_code: 'COBALT-123456',
           team_codes: [{ id: 'tc-1', code: 'COBALT-123456' }],
-          skills_suggestions: [{ id: 'sk-1', name: 'React' }],
+          skills_team: [{ id: 'sk-1', name: 'React' }],
           created_at: new Date(),
         },
         message: 'Team created successfully',
@@ -341,13 +275,50 @@ describe('CompetitionController', () => {
         name: 'Test Team',
         visibility: true,
         description: 'Team description',
-        skills: ['React'],
+        skills_team: ['React'],
       };
 
       const result = await controller.createTeam('comp-1', 'Bearer token', dto);
 
-      expect(mockCompetitionService.createTeam).toHaveBeenCalledWith('comp-1', 'Bearer token', dto);
+      expect(mockCompetitionService.createTeam).toHaveBeenCalledWith(
+        'comp-1',
+        'Bearer token',
+        dto,
+      );
       expect(result).toEqual(mockTeamResponse);
+    });
+  });
+
+  describe('findSignatureCertificateParticipant', () => {
+    it('should return signature certificate participant record with explicit teamId', async () => {
+      const mockSigResponse = {
+        data: {
+          id: 'sig-1',
+          signature: '0x123',
+          user_id: 'user-1',
+          competition_id: 'comp-1',
+          team_id: 'team-1',
+          created_at: new Date(),
+          updated_at: null,
+          deleted_at: null,
+        },
+        message: 'Signature certificate participant retrieved successfully',
+        errors: null,
+      };
+      mockCompetitionService.findSignatureCertificateParticipant.mockResolvedValue(
+        mockSigResponse,
+      );
+
+      const result = await controller.findSignatureCertificateParticipant(
+        'comp-1',
+        'team-1',
+        'Bearer token',
+      );
+
+      expect(
+        mockCompetitionService.findSignatureCertificateParticipant,
+      ).toHaveBeenCalledWith('comp-1', 'team-1', 'Bearer token');
+      expect(result).toEqual(mockSigResponse);
     });
   });
 });

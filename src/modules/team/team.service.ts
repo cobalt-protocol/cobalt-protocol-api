@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
@@ -14,6 +15,8 @@ import { UpdateTeamDto } from './dto/update-team.dto.js';
 
 @Injectable()
 export class TeamService {
+  private readonly logger = new Logger(TeamService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listPublic(query: TeamQueryDto) {
@@ -24,10 +27,7 @@ export class TeamService {
     if (competitionId) {
       const comp = await this.prisma.competition.findFirst({
         where: {
-          OR: [
-            { id: competitionId },
-            { competition_id: competitionId },
-          ],
+          OR: [{ id: competitionId }, { competition_id: competitionId }],
           deleted_at: null,
         },
       });
@@ -73,7 +73,7 @@ export class TeamService {
             },
           },
           team_codes: true,
-          skills_suggestions: true,
+          skills_team: true,
         },
       }),
     ]);
@@ -92,10 +92,7 @@ export class TeamService {
   async listPublicByCompetitionId(competitionId: string) {
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [
-          { id: competitionId },
-          { competition_id: competitionId },
-        ],
+        OR: [{ id: competitionId }, { competition_id: competitionId }],
         deleted_at: null,
       },
     });
@@ -111,7 +108,7 @@ export class TeamService {
         deleted_at: null,
       },
       include: {
-        skills_suggestions: true,
+        skills_team: true,
         team_codes: true,
         team_roles: {
           include: {
@@ -144,11 +141,13 @@ export class TeamService {
   async listAllByCompetitionId(competitionId: string, userId: string) {
     const competition = await this.prisma.competition.findFirst({
       where: {
-        OR: [
-          { id: competitionId },
-          { competition_id: competitionId },
-        ],
+        OR: [{ id: competitionId }, { competition_id: competitionId }],
         deleted_at: null,
+      },
+      include: {
+        user: {
+          select: { id: true },
+        },
       },
     });
 
@@ -156,7 +155,53 @@ export class TeamService {
       throw new NotFoundException('Competition not found');
     }
 
-    const isOwner = Boolean(competition.user_id && competition.user_id === userId);
+    const compOwnerUserId = competition.user?.id ?? null;
+
+    let isOwner = false;
+
+    if (compOwnerUserId) {
+      if (compOwnerUserId.toLowerCase() === userId.toLowerCase()) {
+        isOwner = true;
+      }
+    }
+
+    if (!isOwner) {
+      const user = await this.prisma.user?.findFirst?.({
+        where: {
+          OR: [
+            { id: userId },
+            { wallet_address: { equals: userId, mode: 'insensitive' } },
+          ],
+        },
+      });
+
+      if (user) {
+        const dbUserIdLower = user.id.toLowerCase();
+        const dbWalletLower = user.wallet_address.toLowerCase();
+
+        if (compOwnerUserId) {
+          const compUserIdLower = compOwnerUserId.toLowerCase();
+          if (
+            compUserIdLower === dbUserIdLower ||
+            compUserIdLower === dbWalletLower
+          ) {
+            isOwner = true;
+          }
+        }
+
+        if (!isOwner) {
+          const feePaid = await this.prisma.competitionFeePaid?.findFirst?.({
+            where: {
+              competition_id: competition.id,
+              payer: { equals: user.wallet_address, mode: 'insensitive' },
+            },
+          });
+          if (feePaid) {
+            isOwner = true;
+          }
+        }
+      }
+    }
 
     if (!isOwner) {
       throw new ForbiddenException(
@@ -170,7 +215,7 @@ export class TeamService {
         deleted_at: null,
       },
       include: {
-        skills_suggestions: true,
+        skills_team: true,
         team_codes: true,
         team_roles: {
           include: {
@@ -253,6 +298,13 @@ export class TeamService {
     const team = await this.prisma.team.findFirst({
       where: { id: teamId, deleted_at: null },
       include: {
+        competition: {
+          include: {
+            user: {
+              select: { id: true },
+            },
+          },
+        },
         team_roles: {
           include: {
             user: {
@@ -272,17 +324,83 @@ export class TeamService {
       throw new NotFoundException('Team not found');
     }
 
-    const isMember =
-      userId &&
-      (team.user_id === userId ||
-        team.team_roles.some((role) => role.user_id === userId));
+    let isCompetitionOwner = false;
 
-    if (!team.visibility && !isMember) {
-      throw new ForbiddenException('Private team access is restricted');
+    if (userId && (team as any).competition) {
+      const competition = (team as any).competition;
+      const compUserId = competition.user?.id ?? null;
+
+      if (compUserId && compUserId.toLowerCase() === userId.toLowerCase()) {
+        isCompetitionOwner = true;
+      }
+
+      if (!isCompetitionOwner) {
+        const user = await this.prisma.user?.findFirst?.({
+          where: {
+            OR: [
+              { id: userId },
+              { wallet_address: { equals: userId, mode: 'insensitive' } },
+            ],
+          },
+        });
+
+        if (user) {
+          const dbUserIdLower = user.id.toLowerCase();
+          const dbWalletLower = user.wallet_address.toLowerCase();
+
+          if (compUserId) {
+            const compUserIdLower = compUserId.toLowerCase();
+            if (
+              compUserIdLower === dbUserIdLower ||
+              compUserIdLower === dbWalletLower
+            ) {
+              isCompetitionOwner = true;
+            }
+          }
+
+          if (!isCompetitionOwner && competition.id) {
+            const feePaid = await this.prisma.competitionFeePaid?.findFirst?.({
+              where: {
+                competition_id: competition.id,
+                payer: { equals: user.wallet_address, mode: 'insensitive' },
+              },
+            });
+            if (feePaid) {
+              isCompetitionOwner = true;
+            }
+          }
+        }
+      }
+    }
+
+    if (!isCompetitionOwner) {
+      if (userId) {
+        const pendingRequest = await this.prisma.requestJoin.findFirst({
+          where: {
+            team_id: team.id,
+            user_id: userId,
+            status: 'pending',
+            deleted_at: null,
+          },
+        });
+
+        if (pendingRequest) {
+          throw new ForbiddenException('Your join request is still pending');
+        }
+      }
+
+      const isMember =
+        userId &&
+        (team.user_id === userId ||
+          (team as any).team_roles?.some((role: any) => role.user_id === userId));
+
+      if (!isMember) {
+        throw new NotFoundException('Team not found');
+      }
     }
 
     return {
-      data: team.team_roles,
+      data: (team as any).team_roles,
     };
   }
 
@@ -365,12 +483,13 @@ export class TeamService {
           description: team.competition.description,
           requirement: team.competition.requirement,
           category: team.competition.category,
-          max_team_size: 5,
+          formation: team.competition.formation,
           registration_window: team.competition.registration_window,
           competition_window: team.competition.competition_window,
           submission_deadline: team.competition.submission_deadline,
           judging_review: team.competition.judging_review,
           result_announcement: team.competition.result_announcement,
+          pirze_certificate_claim: team.competition.pirze_certificate_claim,
           guidebook_cid: team.competition.guidebook_cid,
           certificate_cid: team.competition.certificate_cid,
           created_at: team.competition.created_at,
@@ -456,20 +575,191 @@ export class TeamService {
     return { data: role, message: 'Successfully joined team' };
   }
 
-  async acceptInviteByReference(inviteId: string, userId: string) {
-    const code = await this.prisma.teamCode.findFirst({
-      where: {
-        OR: [{ id: inviteId }, { code: inviteId }],
-        is_used: false,
-      },
-      include: { team: true },
+  async requestJoin(teamId: string, userId: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
     });
 
-    if (!code || !code.team) {
-      throw new NotFoundException('Invalid or used invite code');
+    if (!team) {
+      throw new NotFoundException('Team not found');
     }
 
-    return this.acceptInvite(code.team.id, code.id, userId);
+    const existingRole = await this.prisma.teamRole.findFirst({
+      where: { team_id: team.id, user_id: userId },
+    });
+
+    if (existingRole) {
+      throw new ConflictException('You are already a member of this team');
+    }
+
+    const existingRequest = await this.prisma.requestJoin.findFirst({
+      where: { team_id: team.id, user_id: userId },
+    });
+
+    if (
+      existingRequest &&
+      existingRequest.status === 'pending' &&
+      !existingRequest.deleted_at
+    ) {
+      throw new ConflictException(
+        'You already have a pending join request for this team',
+      );
+    }
+
+    const request = existingRequest
+      ? await this.prisma.requestJoin.update({
+          where: { id: existingRequest.id },
+          data: { status: 'pending', deleted_at: null },
+        })
+      : await this.prisma.requestJoin.create({
+          data: { team_id: team.id, user_id: userId, status: 'pending' },
+        });
+
+    return {
+      data: request,
+      message: 'Join request submitted successfully',
+      errors: null,
+    };
+  }
+
+  async listRequestJoins(teamId: string, userId: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+    });
+
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (team.user_id !== userId) {
+      throw new ForbiddenException(
+        'Only the team leader can view join requests',
+      );
+    }
+
+    const requests = await this.prisma.requestJoin.findMany({
+      where: { team_id: team.id, deleted_at: null },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            wallet_address: true,
+            institution: true,
+            location: true,
+            skill_description: true,
+            social_media: true,
+            skills: true,
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return {
+      data: requests,
+      message: 'Join requests retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async acceptRequestJoin(teamId: string, requestId: string, userId: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+    });
+
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (team.user_id !== userId) {
+      throw new ForbiddenException(
+        'Only the team leader can accept join requests',
+      );
+    }
+
+    const request = await this.prisma.requestJoin.findFirst({
+      where: { id: requestId, team_id: team.id, deleted_at: null },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Join request not found');
+    }
+
+    if (request.status !== 'pending') {
+      throw new BadRequestException('Join request has already been processed');
+    }
+
+    const existingRole = await this.prisma.teamRole.findFirst({
+      where: { team_id: team.id, user_id: request.user_id },
+    });
+
+    if (existingRole) {
+      throw new BadRequestException('User is already a member of this team');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedRequest = await tx.requestJoin.update({
+        where: { id: request.id },
+        data: { status: 'accepted' },
+      });
+
+      const role = await tx.teamRole.create({
+        data: {
+          team_id: team.id,
+          user_id: request.user_id,
+          role: 'MEMBER',
+        },
+      });
+
+      return { request: updatedRequest, role };
+    });
+
+    return {
+      data: result,
+      message: 'Join request accepted successfully',
+      errors: null,
+    };
+  }
+
+  async rejectRequestJoin(teamId: string, requestId: string, userId: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, deleted_at: null },
+    });
+
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (team.user_id !== userId) {
+      throw new ForbiddenException(
+        'Only the team leader can reject join requests',
+      );
+    }
+
+    const request = await this.prisma.requestJoin.findFirst({
+      where: { id: requestId, team_id: team.id, deleted_at: null },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Join request not found');
+    }
+
+    if (request.status !== 'pending') {
+      throw new BadRequestException('Join request has already been processed');
+    }
+
+    const updatedRequest = await this.prisma.requestJoin.update({
+      where: { id: request.id },
+      data: { status: 'rejected' },
+    });
+
+    return {
+      data: updatedRequest,
+      message: 'Join request rejected successfully',
+      errors: null,
+    };
   }
 
   async create(id: string, userId: string, dto: CreateTeamDto) {
@@ -485,7 +775,8 @@ export class TeamService {
     }
 
     const isPublic = Boolean(dto.visibility);
-    const teamCodeStr = isPublic
+    const isPrivate = !isPublic;
+    const teamCodeStr = isPrivate
       ? `COBALT-${randomBytes(5).toString('hex').toUpperCase()}`
       : null;
 
@@ -501,7 +792,19 @@ export class TeamService {
         description: dto.description ? dto.description.trim() : '',
         competition_id: competition.id,
         user_id: userId,
-        ...(isPublic && teamCodeStr
+        skills_team: {
+          create:
+            dto.skills_team
+              ?.map((s) => (typeof s === 'string' ? s.trim() : ''))
+              .filter((name) => name.length > 0)
+              .map((name) => ({ name })) ?? [],
+        },
+        requirements_team: {
+          create: {
+            requirement: dto.description ? dto.description.trim() : '',
+          },
+        },
+        ...(isPrivate && teamCodeStr
           ? {
               team_codes: {
                 create: [
@@ -522,6 +825,8 @@ export class TeamService {
         },
       },
       include: {
+        skills_team: true,
+        requirements_team: true,
         team_codes: true,
         team_roles: true,
       },
@@ -530,106 +835,6 @@ export class TeamService {
     return {
       data: team,
       message: 'Team created successfully',
-    };
-  }
-
-  async requestJoin(teamId: string, userId: string) {
-    const team = await this.prisma.team.findFirst({
-      where: { id: teamId, deleted_at: null },
-    });
-
-    if (!team) {
-      throw new NotFoundException('Team not found');
-    }
-
-    if (!team.visibility) {
-      throw new ForbiddenException('Cannot request to join a private team');
-    }
-
-    const existingRequest = await this.prisma.teamRole.findFirst({
-      where: { team_id: teamId, user_id: userId, deleted_at: null },
-    });
-
-    if (existingRequest) {
-      throw new ConflictException('Pending join request already exists');
-    }
-
-    const request = await this.prisma.teamRole.create({
-      data: {
-        team_id: teamId,
-        user_id: userId,
-        role: 'APPLICANT',
-      },
-    });
-
-    return { data: request, message: 'Join request sent' };
-  }
-
-  async listRequests(teamId: string, userId: string) {
-    const team = await this.prisma.team.findFirst({
-      where: { id: teamId, user_id: userId, deleted_at: null },
-    });
-
-    if (!team) {
-      throw new ForbiddenException(
-        'Only the team leader can view join requests',
-      );
-    }
-
-    const requests = await this.prisma.teamRole.findMany({
-      where: { team_id: teamId, role: 'APPLICANT', deleted_at: null },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            wallet_address: true,
-            skill_description: true,
-          },
-        },
-      },
-    });
-
-    return { data: requests };
-  }
-
-  async decide(
-    teamId: string,
-    requestId: string,
-    userId: string,
-    accept: boolean,
-  ) {
-    const team = await this.prisma.team.findFirst({
-      where: { id: teamId, user_id: userId, deleted_at: null },
-    });
-
-    if (!team) {
-      throw new ForbiddenException(
-        'Only the team leader can manage join requests',
-      );
-    }
-
-    const joinRequest = await this.prisma.teamRole.findFirst({
-      where: { id: requestId, team_id: teamId, role: 'APPLICANT', deleted_at: null },
-    });
-
-    if (!joinRequest) {
-      throw new NotFoundException('Pending join request not found');
-    }
-
-    if (accept) {
-      await this.prisma.teamRole.update({
-        where: { id: joinRequest.id },
-        data: { role: 'MEMBER' },
-      });
-    } else {
-      await this.prisma.teamRole.delete({
-        where: { id: joinRequest.id },
-      });
-    }
-
-    return {
-      message: accept ? 'Request accepted' : 'Request rejected',
     };
   }
 
@@ -754,23 +959,33 @@ export class TeamService {
       }
     }
 
-    const skills =
-      dto.skills_suggestions ?? dto.skills_suggestion ?? dto.skills;
-
     const updatedTeam = await this.prisma.$transaction(async (tx) => {
-      if (skills !== undefined) {
-        await tx.skillsSuggestion.deleteMany({
+      if (dto.skills_team !== undefined) {
+        await tx.skillsTeam.deleteMany({
           where: { team_id: teamId },
         });
 
+        const skills = dto.skills_team
+          .map((s) => (typeof s === 'string' ? s.trim() : ''))
+          .filter((name) => name.length > 0);
+
         if (skills.length > 0) {
-          await tx.skillsSuggestion.createMany({
+          await tx.skillsTeam.createMany({
             data: skills.map((name) => ({
               team_id: teamId,
               name,
             })),
           });
         }
+      }
+
+      if (dto.description !== undefined) {
+        const requirement = dto.description.trim();
+        await tx.requirementsTeam.upsert({
+          where: { team_id: teamId },
+          create: { team_id: teamId, requirement },
+          update: { requirement },
+        });
       }
 
       return tx.team.update({
@@ -783,7 +998,8 @@ export class TeamService {
           }),
         },
         include: {
-          skills_suggestions: true,
+          skills_team: true,
+          requirements_team: true,
           team_codes: true,
           team_roles: {
             include: {

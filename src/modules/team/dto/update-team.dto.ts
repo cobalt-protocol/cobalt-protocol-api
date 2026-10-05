@@ -20,8 +20,7 @@ export class UpdateTeamDto {
 
   @ApiPropertyOptional({
     description: 'Team description',
-    example:
-      'Building decentralized AI applications and zero-knowledge proofs',
+    example: 'Building decentralized AI applications and zero-knowledge proofs',
   })
   @IsOptional()
   @IsString()
@@ -35,25 +34,5 @@ export class UpdateTeamDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  skills?: string[];
-
-  @ApiPropertyOptional({
-    description: 'List of skills needed or suggested for the team (alias)',
-    type: [String],
-    example: ['Frontend Developer', 'Smart Contract Engineer'],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  skills_suggestion?: string[];
-
-  @ApiPropertyOptional({
-    description: 'List of skills needed or suggested for the team (alias)',
-    type: [String],
-    example: ['Frontend Developer', 'Smart Contract Engineer'],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  skills_suggestions?: string[];
+  skills_team?: string[];
 }

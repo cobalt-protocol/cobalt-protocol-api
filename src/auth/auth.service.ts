@@ -9,9 +9,9 @@ import { randomBytes } from 'node:crypto';
 import { verifyMessage } from 'viem';
 import {
   User,
-  SkillDescription,
-  SocialMedia,
-  Skill,
+  SkillDescriptionUser,
+  SocialMediaUser,
+  SkillUser,
   Organization,
 } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -23,10 +23,10 @@ export type UserRole = 'organization' | 'user';
 
 export type UserWithRole = User & {
   role: UserRole;
-  skill_description?: SkillDescription | null;
-  social_media?: SocialMedia | null;
-  skill?: Skill | null;
-  skills?: Skill[];
+  skill_description?: SkillDescriptionUser | null;
+  social_media?: SocialMediaUser | null;
+  skill?: SkillUser | null;
+  skills?: SkillUser[];
   organization?: Organization | null;
 };
 
@@ -81,14 +81,6 @@ export class AuthService {
         return 'organization';
       }
 
-      const competition = await this.prisma.competition.findFirst({
-        where: { user_id: userId },
-        select: { id: true },
-      });
-      if (competition) {
-        return 'organization';
-      }
-
       return 'user';
     } catch (dbError) {
       this.logger.warn(
@@ -100,9 +92,7 @@ export class AuthService {
 
   async generateNonce(dto?: RequestNonceDto): Promise<NonceResponse> {
     const nonce = randomBytes(16).toString('hex');
-    const walletAddress = dto?.walletAddress
-      ? dto.walletAddress
-      : undefined;
+    const walletAddress = dto?.walletAddress ? dto.walletAddress : undefined;
 
     let user: User | null = null;
 
@@ -385,7 +375,8 @@ export class AuthService {
 
     const role = await this.getUserRole(user.id);
     const { organizations, ...userWithoutOrganizations } = user;
-    const organization = organizations && organizations.length > 0 ? organizations[0] : null;
+    const organization =
+      organizations && organizations.length > 0 ? organizations[0] : null;
 
     return {
       data: {

@@ -23,7 +23,7 @@ import { VerifySignatureDto } from './dto/verify-signature.dto.js';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('nonce')
   @HttpCode(HttpStatus.CREATED)
@@ -117,7 +117,10 @@ export class AuthController {
   @Get('me')
   @UseInterceptors(NoCacheInterceptor)
   @HttpCode(HttpStatus.OK)
-  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate',
+  )
   @Header('Pragma', 'no-cache')
   @Header('Expires', '0')
   @Header('Surrogate-Control', 'no-store')

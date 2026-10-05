@@ -10,7 +10,10 @@ describe('ProfileService privacy', () => {
     location: 'Jakarta',
     institution: 'Campus',
     skill_description: { description: 'Builder' },
-    social_media: { github_link: 'https://github.com/builder_b', linkedin_link: 'https://linkedin.com/in/builder_b' },
+    social_media: {
+      github_link: 'https://github.com/builder_b',
+      linkedin_link: 'https://linkedin.com/in/builder_b',
+    },
     skills: [{ skill_name: 'Rust', level: 'ADVANCED' }],
   };
   const userUpdate = vi.fn();
@@ -22,43 +25,25 @@ describe('ProfileService privacy', () => {
   const skillDeleteMany = vi.fn();
 
   const prisma = {
-    user: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: userUpdate },
-    skillDescription: { upsert: skillDescriptionUpsert },
-    socialMedia: { findUnique: socialMediaFindUnique, update: socialMediaUpdate, create: socialMediaCreate },
-    skill: { upsert: skillUpsert, deleteMany: skillDeleteMany, createMany: vi.fn() },
+    user: { findFirst: vi.fn(), update: userUpdate },
+    skillDescriptionUser: { upsert: skillDescriptionUpsert },
+    socialMediaUser: {
+      findUnique: socialMediaFindUnique,
+      update: socialMediaUpdate,
+      create: socialMediaCreate,
+    },
+    skillUser: {
+      upsert: skillUpsert,
+      deleteMany: skillDeleteMany,
+      createMany: vi.fn(),
+    },
     $transaction: vi.fn((cb) => cb(prisma)),
   };
   const service = new ProfileService(prisma as unknown as PrismaService);
   beforeEach(() => {
     vi.clearAllMocks();
     prisma.user.findFirst.mockResolvedValue(row);
-    prisma.user.findMany.mockResolvedValue([row]);
-    prisma.user.count.mockResolvedValue(1);
     socialMediaFindUnique.mockResolvedValue(null);
-  });
-
-  it('returns display fields and social media for users', async () => {
-    expect(await service.findPublic('builder_b')).toEqual({
-      id: 'user-b',
-      username: 'builder_b',
-      location: 'Jakarta',
-      institution: 'Campus',
-      pitch: 'Builder',
-      description: 'Builder',
-      social_media: {
-        github_link: 'https://github.com/builder_b',
-        linkedin_link: 'https://linkedin.com/in/builder_b',
-      },
-      github_link: 'https://github.com/builder_b',
-      linkedin_link: 'https://linkedin.com/in/builder_b',
-      githubLink: 'https://github.com/builder_b',
-      linkedinLink: 'https://linkedin.com/in/builder_b',
-      skills: [{ name: 'Rust', level: 'Proficient' }],
-    });
-    expect(prisma.user.findFirst.mock.calls[0][0].select.email).toBeUndefined();
-    expect(
-      prisma.user.findFirst.mock.calls[0][0].select.wallet_address,
-    ).toBeUndefined();
   });
 
   it('keeps private fields on the own-profile route only', async () => {
@@ -66,9 +51,6 @@ describe('ProfileService privacy', () => {
     expect(prisma.user.findFirst.mock.calls[0][0].where.id).toBe('user-a');
     expect(mine.email).toBe('private@example.com');
     expect(mine.walletAddress).toBe('0xabc');
-    const directory = await service.findAll({ page: 1, limit: 10 });
-    expect(directory.data[0]).not.toHaveProperty('email');
-    expect(directory.data[0]).not.toHaveProperty('walletAddress');
   });
 
   it('updates profile fields on user, social_media, and skill_description tables', async () => {

@@ -11,4 +11,3 @@ import { CompetitionService } from './competition.service.js';
   exports: [CompetitionService],
 })
 export class CompetitionModule {}
-
