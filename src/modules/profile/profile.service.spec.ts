@@ -23,6 +23,7 @@ describe('ProfileService privacy', () => {
   const socialMediaCreate = vi.fn();
   const skillUpsert = vi.fn();
   const skillDeleteMany = vi.fn();
+  const skillCreateMany = vi.fn();
 
   const prisma = {
     user: { findFirst: vi.fn(), update: userUpdate },
@@ -35,7 +36,7 @@ describe('ProfileService privacy', () => {
     skillUser: {
       upsert: skillUpsert,
       deleteMany: skillDeleteMany,
-      createMany: vi.fn(),
+      createMany: skillCreateMany,
     },
     $transaction: vi.fn((cb) => cb(prisma)),
   };
@@ -87,5 +88,70 @@ describe('ProfileService privacy', () => {
         linkedin_link: 'https://linkedin.com/in/new_name',
       },
     });
+
+    // REGRESI: description tidak boleh bocor ke skills_user
+    expect(skillDeleteMany).not.toHaveBeenCalled();
+    expect(skillCreateMany).not.toHaveBeenCalled();
+    expect(skillUpsert).not.toHaveBeenCalled();
+  });
+
+  it('description/pitch only touches skill_description_user, never skills_user', async () => {
+    await service.updateMine('user-b', {
+      description: 'Hanya bio baru',
+    });
+
+    expect(skillDescriptionUpsert).toHaveBeenCalledWith({
+      where: { user_id: 'user-b' },
+      create: { user_id: 'user-b', description: 'Hanya bio baru' },
+      update: { description: 'Hanya bio baru' },
+    });
+    // skills_user tidak boleh tersentuh sama sekali
+    expect(skillDeleteMany).not.toHaveBeenCalled();
+    expect(skillCreateMany).not.toHaveBeenCalled();
+    expect(skillUpsert).not.toHaveBeenCalled();
+  });
+
+  it('pitch alias also goes to skill_description_user, not skills_user', async () => {
+    await service.updateMine('user-b', {
+      pitch: 'Pitch via alias',
+    });
+
+    expect(skillDescriptionUpsert).toHaveBeenCalledWith({
+      where: { user_id: 'user-b' },
+      create: { user_id: 'user-b', description: 'Pitch via alias' },
+      update: { description: 'Pitch via alias' },
+    });
+    expect(skillDeleteMany).not.toHaveBeenCalled();
+    expect(skillCreateMany).not.toHaveBeenCalled();
+  });
+
+  it('when both description and skills sent, skills_user only gets skill names, not description', async () => {
+    await service.updateMine('user-b', {
+      description: 'Bio tetap di skill_description',
+      skills: [
+        { name: 'Solidity', level: 'Expert' },
+        { name: 'Next.js', level: 'Advanced' },
+      ],
+    });
+
+    expect(skillDescriptionUpsert).toHaveBeenCalledWith({
+      where: { user_id: 'user-b' },
+      create: { user_id: 'user-b', description: 'Bio tetap di skill_description' },
+      update: { description: 'Bio tetap di skill_description' },
+    });
+
+    expect(skillDeleteMany).toHaveBeenCalledWith({ where: { user_id: 'user-b' } });
+    expect(skillCreateMany).toHaveBeenCalledWith({
+      data: [
+        { user_id: 'user-b', skill_name: 'Solidity' },
+        { user_id: 'user-b', skill_name: 'Next.js' },
+      ],
+    });
+    // pastikan description tidak ikut ter-insert sebagai skill_name
+    const insertedNames = skillCreateMany.mock.calls[0][0].data.map(
+      (row: { skill_name: string }) => row.skill_name,
+    );
+    expect(insertedNames).not.toContain('Bio tetap di skill_description');
+    expect(skillUpsert).not.toHaveBeenCalled();
   });
 });

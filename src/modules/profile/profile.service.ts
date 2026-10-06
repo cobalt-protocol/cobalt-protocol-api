@@ -79,6 +79,8 @@ export class ProfileService {
         throw new ConflictException('Skill names must be unique and nonempty');
     }
 
+    // PAYLOAD RULE: description/pitch HANYA ke skillDescriptionUser (tabel skill_description_user),
+    // JANGAN pernah insert ke skills_user. skills[] HANYA ke skills_user (SkillUser).
     const description = dto.description ?? dto.pitch;
     const githubLink =
       dto.github_link ??
