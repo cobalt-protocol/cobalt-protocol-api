@@ -1,16 +1,14 @@
 import { Module } from '@nestjs/common';
-import {
-  AuthSessionGuard,
-  OptionalAuthSessionGuard,
-} from '../../auth/auth-session.guard.js';
-import { PrismaModule } from '../../prisma/prisma.module.js';
+import { PrismaService } from '../../prisma/prisma.service.js';
+import { AuthModule } from '../../auth/auth.module.js';
+import { AuthSessionGuard } from '../../auth/auth-session.guard.js';
 import { TeamController } from './team.controller.js';
 import { TeamService } from './team.service.js';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [AuthModule],
   controllers: [TeamController],
-  providers: [TeamService, AuthSessionGuard, OptionalAuthSessionGuard],
+  providers: [TeamService, PrismaService, AuthSessionGuard],
   exports: [TeamService],
 })
 export class TeamModule {}

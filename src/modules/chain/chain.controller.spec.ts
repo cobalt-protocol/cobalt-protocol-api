@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { ChainController } from './chain.controller.js';
 import { ChainService } from './chain.service.js';
+import { AuthSessionGuard } from '../../auth/auth-session.guard.js';
 
 describe('ChainController', () => {
   let controller: ChainController;
@@ -41,7 +43,11 @@ describe('ChainController', () => {
 
   const mockChainService = {
     getCompetitionsByChainId: vi.fn(),
+    getCompetitionByChainIdAndId: vi.fn(),
+    createTeam: vi.fn(),
+    getUserTeamsByChainId: vi.fn(),
   };
+
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -53,6 +59,11 @@ describe('ChainController', () => {
           provide: ChainService,
           useValue: mockChainService,
         },
+        {
+          provide: JwtService,
+          useValue: { verifyAsync: vi.fn() },
+        },
+        AuthSessionGuard,
       ],
     }).compile();
 
@@ -69,7 +80,9 @@ describe('ChainController', () => {
 
       const result = await controller.getCompetitionsByChainId(11155111);
 
-      expect(mockChainService.getCompetitionsByChainId).toHaveBeenCalledWith(11155111);
+      expect(mockChainService.getCompetitionsByChainId).toHaveBeenCalledWith(
+        11155111,
+      );
       expect(result).toEqual(mockResponse);
     });
 
@@ -83,4 +96,55 @@ describe('ChainController', () => {
       );
     });
   });
+
+  describe('getCompetitionByChainIdAndId', () => {
+    it('should return a specific competition for a given chain id and competition id', async () => {
+      mockChainService.getCompetitionByChainIdAndId.mockResolvedValue(mockResponse);
+
+      const result = await controller.getCompetitionByChainIdAndId(11155111, '01J8Z9X0000000000000000001');
+
+      expect(mockChainService.getCompetitionByChainIdAndId).toHaveBeenCalledWith(
+        11155111,
+        '01J8Z9X0000000000000000001',
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should throw NotFoundException if chain service throws NotFoundException', async () => {
+      mockChainService.getCompetitionByChainIdAndId.mockRejectedValue(
+        new NotFoundException('Competition with ID invalid not found on chain ID 11155111'),
+      );
+
+      await expect(
+        controller.getCompetitionByChainIdAndId(11155111, 'invalid'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('createTeam', () => {
+    it('should pass data to chainService.createTeam', async () => {
+      mockChainService.createTeam.mockResolvedValue({ message: 'Team created' });
+      const req = { userId: 'user-1' } as any;
+      const dto = { name: 'My Team', visibility: true, description: 'Desc' };
+
+      const result = await controller.createTeam(11155111, 'comp-1', req, dto);
+
+      expect(mockChainService.createTeam).toHaveBeenCalledWith('user-1', 11155111, 'comp-1', dto);
+      expect(result).toEqual({ message: 'Team created' });
+    });
+  });
+
+  describe('getUserTeamsByChainId', () => {
+    it('should return user teams for a given chain id', async () => {
+      mockChainService.getUserTeamsByChainId.mockResolvedValue({ message: 'Success' });
+      const req = { userId: 'user-1' } as any;
+
+      const result = await controller.getUserTeamsByChainId(11155111, req);
+
+      expect(mockChainService.getUserTeamsByChainId).toHaveBeenCalledWith('user-1', 11155111);
+      expect(result).toEqual({ message: 'Success' });
+    });
+  });
 });
+
+

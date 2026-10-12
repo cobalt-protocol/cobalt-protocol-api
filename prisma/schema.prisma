@@ -23,9 +23,11 @@ model User {
   competitions                           Competition[]
   nonce_connect                          NonceConnect?
   organizations                          Organization[]
+  participant_winner                     ParticipantWinner?
   request_joins                          RequestJoin[]
   signature_certificate_participants     SignatureCertificateParticipant[]
   signature_certificate_winners          SignatureCertificateWinner[]
+  signature_set_winners                  SignatureSetWinner[]
   skill_description                      SkillDescriptionUser?
   skills                                 SkillUser[]
   social_media                           SocialMediaUser?
@@ -133,17 +135,18 @@ model Competition {
 }
 
 model PrizeWinner {
-  id              String      @id @default(ulid()) @db.VarChar
-  winner_id       BigInt
-  category        String      @db.VarChar
-  amount          Decimal     @db.Decimal(78, 0)
-  certificate_cid String      @db.VarChar
-  competition_id  String      @db.VarChar
-  created_at      DateTime    @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime?   @default(now()) @updatedAt @db.Timestamptz(6)
-  deleted_at      DateTime?   @db.Timestamptz(6)
-  competition     Competition @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  winner          Winner?
+  id                  String              @id @default(ulid()) @db.VarChar
+  winner_id           BigInt              @unique
+  category            String              @db.VarChar
+  amount              Decimal             @db.Decimal(78, 0)
+  certificate_cid     String              @db.VarChar
+  competition_id      String              @db.VarChar
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?           @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at          DateTime?           @db.Timestamptz(6)
+  competition         Competition         @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  winner              Winner?
+  participant_winners ParticipantWinner[]
 
   @@map("prize_winner")
 }
@@ -155,6 +158,7 @@ model Team {
   description                            String                               @db.VarChar
   competition_id                         String                               @db.VarChar
   user_id                                String                               @db.VarChar
+  tx_hash                                String?                              @db.VarChar
   created_at                             DateTime                             @default(now()) @db.Timestamptz(6)
   updated_at                             DateTime?                            @default(now()) @updatedAt @db.Timestamptz(6)
   deleted_at                             DateTime?                            @db.Timestamptz(6)
@@ -172,6 +176,7 @@ model Team {
   team_codes                             TeamCode[]
   team_roles                             TeamRole[]
 
+  @@index([tx_hash])
   @@map("team")
 }
 
@@ -201,7 +206,7 @@ model RequirementsTeam {
 
 model RequestJoin {
   id         String    @id @default(ulid()) @db.VarChar
-  status     String    @db.VarChar
+  status     String    @default("pending") @db.VarChar
   user_id    String    @db.VarChar
   team_id    String    @db.VarChar
   created_at DateTime  @default(now()) @db.Timestamptz(6)
@@ -227,7 +232,7 @@ model TeamCode {
 
 model TeamRole {
   id         String    @id @default(ulid()) @db.VarChar
-  role       String    @db.VarChar
+  role       String    @default("leader") @db.VarChar
   user_id    String    @db.VarChar
   team_id    String    @db.VarChar
   created_at DateTime  @default(now()) @db.Timestamptz(6)
@@ -269,13 +274,15 @@ model Winner {
 }
 
 model NonceConnect {
-  id         String    @id @default(ulid()) @db.VarChar
-  nonce      String    @unique @db.VarChar
-  user_id    String    @unique @db.VarChar
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
-  deleted_at DateTime? @db.Timestamptz(6)
-  user       User      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String        @id @default(ulid()) @db.VarChar
+  nonce            String        @unique @db.VarChar
+  user_id          String        @unique @db.VarChar
+  indexer_state_id String?       @db.VarChar
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?     @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at       DateTime?     @db.Timestamptz(6)
+  user             User          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  indexer_state    IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("nonce_connect")
 }
@@ -319,6 +326,7 @@ model SignatureCertificateWinner {
 model SignatureSetWinner {
   id               String        @id @default(ulid()) @db.VarChar
   signature        String        @db.VarChar
+  user_id          String        @db.VarChar
   competition_id   String        @db.VarChar
   team_id          String        @unique @db.VarChar
   indexer_state_id String?       @db.VarChar
@@ -328,6 +336,7 @@ model SignatureSetWinner {
   competition      Competition   @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   indexer_state    IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   team             Team          @relation(fields: [team_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user             User          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("signature_set_winner")
 }
@@ -337,7 +346,7 @@ model ListingToken {
   tx_hash          String        @db.VarChar
   listing_token_id BigInt
   token_address    String        @db.VarChar
-  is_active        Boolean
+  is_active        Boolean       @default(true)
   indexer_state_id String?       @db.VarChar
   created_at       DateTime      @default(now()) @db.Timestamptz(6)
   updated_at       DateTime?     @default(now()) @updatedAt @db.Timestamptz(6)
@@ -401,20 +410,25 @@ model CompetitionFeePaid {
 }
 
 model ParticipantWinner {
-  id                    String        @id @default(ulid()) @db.VarChar
-  tx_hash               String        @db.VarChar
-  winner_id             BigInt
-  participant           String        @db.VarChar
-  participant_winner_id BigInt
-  title                 String        @db.VarChar
-  competition_id        String        @db.VarChar
-  indexer_state_id      String?       @db.VarChar
-  created_at            DateTime      @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime?     @default(now()) @updatedAt @db.Timestamptz(6)
-  deleted_at            DateTime?     @db.Timestamptz(6)
-  competition           Competition   @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  indexer_state         IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String        @id @default(ulid()) @db.VarChar
+  tx_hash          String        @db.VarChar
+  // FK 1:1 strict to users.wallet_address (@unique) — one wallet may have at most ONE row globally.
+  // Remove @unique if you need N:1 (one wallet may win multiple competitions).
+  participant      String        @unique @db.VarChar
+  title            String        @db.VarChar
+  competition_id   String        @db.VarChar
+  // Direct FK to prize_winner.winner_id (BigInt, global @unique); 1 prize_winner : N participant_winner
+  prize_winner_id  BigInt?       @db.BigInt
+  indexer_state_id String?       @db.VarChar
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?     @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at       DateTime?     @db.Timestamptz(6)
+  competition      Competition   @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  indexer_state    IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  prize_winner     PrizeWinner?  @relation(fields: [prize_winner_id], references: [winner_id], onDelete: NoAction, onUpdate: NoAction)
+  user             User          @relation(fields: [participant], references: [wallet_address], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([prize_winner_id], map: "ix_participant_winner_prize_winner_id")
   @@map("participant_winner")
 }
 
@@ -493,6 +507,7 @@ model IndexerState {
   competitions                           Competition[]
   competition_fee_paids                  CompetitionFeePaid[]
   listing_tokens                         ListingToken[]
+  nonce_connects                         NonceConnect[]
   participant_winners                    ParticipantWinner[]
   price_competitions                     PriceCompetition[]
   prize_deposits                         PrizeDeposited[]

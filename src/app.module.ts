@@ -9,11 +9,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js';
 import './common/utils/bigint.util.js';
 import { ChainModule } from './modules/chain/chain.module.js';
-import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { TeamModule } from './modules/team/team.module.js';
+import { CertificateModule } from './modules/certificate/certificate.module.js';
+import { SignatureSetWinnerModule } from './modules/signature-set-winner/signature-set-winner.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
-import { ProfileModule } from './modules/profile/profile.module.js';
-import { SubmissionProjectModule } from './modules/submission-project/submission-project.module.js';
 
 @Module({
   imports: [
@@ -26,11 +25,10 @@ import { SubmissionProjectModule } from './modules/submission-project/submission
     AuthModule,
     CompetitionModule,
     PriceCompetitionModule,
-    TeamModule,
-    DashboardModule,
-    ProfileModule,
-    SubmissionProjectModule,
     ChainModule,
+    TeamModule,
+    CertificateModule,
+    SignatureSetWinnerModule,
   ],
   controllers: [],
   providers: [
@@ -45,4 +43,4 @@ import { SubmissionProjectModule } from './modules/submission-project/submission
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
   ],
 })
-export class AppModule {}
+export class AppModule { }

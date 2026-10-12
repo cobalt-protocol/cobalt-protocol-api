@@ -1,12 +1,10 @@
 import {
-  Body,
   Controller,
   Get,
   Headers,
   HttpCode,
   HttpStatus,
   Param,
-  Post,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -16,7 +14,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CompetitionService } from './competition.service.js';
-import { CreateCompetitionTeamDto } from './dto/create-team.dto.js';
 
 @ApiTags('Competitions')
 @Controller('competitions')
@@ -288,7 +285,8 @@ export class CompetitionController {
           signature:
             '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b',
           cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
-          certificate_cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+          certificate_cid:
+            'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
           uri: 'ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
           metadata: {
             title_project: 'My Awesome Project',
@@ -315,11 +313,13 @@ export class CompetitionController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Team has not submitted any project (submission_project is empty) or IPFS pin failed',
+    description:
+      'Team has not submitted any project (submission_project is empty) or IPFS pin failed',
     schema: {
       example: {
         data: null,
-        message: 'Team has not submitted any project yet (submission_project is empty) — cannot generate participant certificate signature',
+        message:
+          'Team has not submitted any project yet (submission_project is empty) — cannot generate participant certificate signature',
         errors: 'Bad Request',
       },
     },
@@ -350,34 +350,115 @@ export class CompetitionController {
 
   @Get(':id/signature-certificate-winner/:winnerId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get signature certificate winner record (live re-signed) by competition ID and winner ID' })
+  @ApiOperation({
+    summary:
+      'Get signature certificate winner record (live re-signed) by competition ID and winner ID',
+  })
   @ApiBearerAuth()
-  @ApiParam({ name: 'id', description: 'Competition ID (ULID or on-chain ID)', type: String, example: '01J8Z9X0000000000000000001' })
-  @ApiParam({ name: 'winnerId', description: 'Winner ID — ULID or on-chain numeric winner_id', type: String, example: '1' })
-  @ApiResponse({ status: 200, description: 'Signature certificate winner retrieved successfully', schema: { example: { data: { id: '01J8Z9X0000000000000000001', signature: '0x1234...1b', user_id: '01J8Z9X0000000000000000002', competition_id: '01J8Z9X0000000000000000001', winner_id: '1', uri: 'ipfs://QmWinner123', created_at: '2026-09-24T00:00:00.000Z', updated_at: null, deleted_at: null }, message: 'Signature certificate winner retrieved successfully', errors: null } } })
-  @ApiResponse({ status: 401, description: 'Unauthorized - missing or invalid Bearer token' })
-  @ApiResponse({ status: 404, description: 'Competition, team, or winner not found' })
+  @ApiParam({
+    name: 'id',
+    description: 'Competition ID (ULID or on-chain ID)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiParam({
+    name: 'winnerId',
+    description: 'Winner ID — ULID or on-chain numeric winner_id',
+    type: String,
+    example: '1',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Signature certificate winner retrieved successfully',
+    schema: {
+      example: {
+        data: {
+          id: '01J8Z9X0000000000000000001',
+          signature: '0x1234...1b',
+          user_id: '01J8Z9X0000000000000000002',
+          competition_id: '01J8Z9X0000000000000000001',
+          winner_id: '1',
+          uri: 'ipfs://QmWinner123',
+          created_at: '2026-09-24T00:00:00.000Z',
+          updated_at: null,
+          deleted_at: null,
+        },
+        message: 'Signature certificate winner retrieved successfully',
+        errors: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - missing or invalid Bearer token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition, team, or winner not found',
+  })
   async findSignatureCertificateWinnerById(
     @Param('id') id: string,
     @Param('winnerId') winnerId: string,
     @Headers('authorization') authHeader: string,
   ) {
-    return this.competitionService.findSignatureCertificateWinner(id, winnerId, authHeader);
+    return this.competitionService.findSignatureCertificateWinner(
+      id,
+      winnerId,
+      authHeader,
+    );
   }
 
   @Get(':id/signature-certificate-winner')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get signature certificate winner record (live re-signed) by competition ID for the authenticated winner' })
+  @ApiOperation({
+    summary:
+      'Get signature certificate winner record (live re-signed) by competition ID for the authenticated winner',
+  })
   @ApiBearerAuth()
-  @ApiParam({ name: 'id', description: 'Competition ID (ULID or on-chain ID)', type: String, example: '01J8Z9X0000000000000000001' })
-  @ApiResponse({ status: 200, description: 'Signature certificate winner retrieved successfully', schema: { example: { data: { id: '01J8Z9X0000000000000000001', signature: '0x1234...1b', user_id: '01J8Z9X0000000000000000002', competition_id: '01J8Z9X0000000000000000001', winner_id: '1', uri: 'ipfs://QmWinner123', created_at: '2026-09-24T00:00:00.000Z', updated_at: null, deleted_at: null }, message: 'Signature certificate winner retrieved successfully', errors: null } } })
-  @ApiResponse({ status: 401, description: 'Unauthorized - missing or invalid Bearer token' })
-  @ApiResponse({ status: 404, description: 'Competition, team, or winner not found' })
+  @ApiParam({
+    name: 'id',
+    description: 'Competition ID (ULID or on-chain ID)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Signature certificate winner retrieved successfully',
+    schema: {
+      example: {
+        data: {
+          id: '01J8Z9X0000000000000000001',
+          signature: '0x1234...1b',
+          user_id: '01J8Z9X0000000000000000002',
+          competition_id: '01J8Z9X0000000000000000001',
+          winner_id: '1',
+          uri: 'ipfs://QmWinner123',
+          created_at: '2026-09-24T00:00:00.000Z',
+          updated_at: null,
+          deleted_at: null,
+        },
+        message: 'Signature certificate winner retrieved successfully',
+        errors: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - missing or invalid Bearer token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition, team, or winner not found',
+  })
   async findSignatureCertificateWinner(
     @Param('id') id: string,
     @Headers('authorization') authHeader: string,
   ) {
-    return this.competitionService.findSignatureCertificateWinner(id, undefined, authHeader);
+    return this.competitionService.findSignatureCertificateWinner(
+      id,
+      undefined,
+      authHeader,
+    );
   }
 
   @Get(':id')
@@ -435,85 +516,5 @@ export class CompetitionController {
   })
   async findOne(@Param('id') id: string) {
     return this.competitionService.findOne(id);
-  }
-
-  @Post(':id/teams')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({
-    summary: 'Create a team for a competition',
-    description:
-      'Creates a team for the authenticated user. An invite code (team_code) is only generated for private teams (visibility: false). Public teams (visibility: true) can be joined directly and therefore do not receive a team_code.',
-  })
-  @ApiBearerAuth()
-  @ApiParam({
-    name: 'id',
-    description: 'Competition ID (ULID or on-chain ID)',
-    type: String,
-    example: '01J8Z9X0000000000000000001',
-  })
-  @ApiResponse({
-    status: 201,
-    description:
-      'Team created successfully. team_code is only returned for private teams (visibility: false).',
-    schema: {
-      example: {
-        data: {
-          id: '01J8Z9X0000000000000000005',
-          name: 'Cyber Warriors',
-          visibility: false,
-          description: 'Building decentralized AI applications',
-          competition_id: '01J8Z9X0000000000000000001',
-          user_id: '01J8Z9X0000000000000000004',
-          team_code: 'COBALT-A1B2C3D4E5',
-          team_codes: [
-            {
-              id: '01J8Z9X0000000000000000006',
-              code: 'COBALT-A1B2C3D4E5',
-              team_id: '01J8Z9X0000000000000000005',
-              created_at: '2026-09-24T00:00:00.000Z',
-              updated_at: null,
-              deleted_at: null,
-            },
-          ],
-          skills_team: [
-            {
-              id: '01J8Z9X0000000000000000007',
-              name: 'Frontend Developer',
-              team_id: '01J8Z9X0000000000000000005',
-              created_at: '2026-09-24T00:00:00.000Z',
-              updated_at: null,
-              deleted_at: null,
-            },
-          ],
-          requirements_team: {
-            id: '01J8Z9X0000000000000000009',
-            requirement: 'Building decentralized AI applications',
-            team_id: '01J8Z9X0000000000000000005',
-            created_at: '2026-09-24T00:00:00.000Z',
-            updated_at: null,
-            deleted_at: null,
-          },
-          created_at: '2026-09-24T00:00:00.000Z',
-          updated_at: null,
-        },
-        message: 'Team created successfully',
-        errors: null,
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - missing or invalid Bearer token',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Competition not found',
-  })
-  async createTeam(
-    @Param('id') id: string,
-    @Headers('authorization') authHeader: string,
-    @Body() dto: CreateCompetitionTeamDto,
-  ) {
-    return this.competitionService.createTeam(id, authHeader, dto);
   }
 }

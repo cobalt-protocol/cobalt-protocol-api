@@ -19,6 +19,8 @@ import { generateUlid } from '../common/utils/ulid.util.js';
 import { RequestNonceDto } from './dto/request-nonce.dto.js';
 import { VerifySignatureDto } from './dto/verify-signature.dto.js';
 
+const INDEXER_CONTRACT_NAME = 'CompetitionManager';
+
 export type UserRole = 'organization' | 'user';
 
 export type UserWithRole = User & {
@@ -71,6 +73,39 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  /**
+   * Resolve the `indexer_state.id` that belongs to a given `chain_id`.
+   *
+   * `nonce_connect.indexer_state_id` references `indexer_state.id`, and
+   * `indexer_state` is unique per `(contract_name, chain_id)`. The indexer
+   * stores its state under the `CompetitionManager` contract name, so the same
+   * pair is used here to link the nonce to the correct chain.
+   *
+   * Returns `null` when no `chain_id` is provided or the chain has no indexer
+   * state yet (the column is nullable, so callers can safely persist `null`).
+   */
+  private async resolveIndexerStateId(chainId?: number): Promise<string | null> {
+    if (chainId === undefined || chainId === null || Number.isNaN(chainId)) {
+      return null;
+    }
+
+    try {
+      const state = await this.prisma.indexerState.findFirst({
+        where: {
+          contract_name: INDEXER_CONTRACT_NAME,
+          chain_id: chainId,
+        },
+        select: { id: true },
+      });
+      return state?.id ?? null;
+    } catch (dbError) {
+      this.logger.warn(
+        `Could not resolve indexer state for chain ${chainId}: ${dbError}`,
+      );
+      return null;
+    }
+  }
+
   private async getUserRole(userId: string): Promise<UserRole> {
     try {
       const org = await this.prisma.organization.findFirst({
@@ -90,7 +125,10 @@ export class AuthService {
     }
   }
 
-  async generateNonce(dto?: RequestNonceDto): Promise<NonceResponse> {
+  async generateNonce(
+    dto?: RequestNonceDto,
+    chainId?: number,
+  ): Promise<NonceResponse> {
     const nonce = randomBytes(16).toString('hex');
     const walletAddress = dto?.walletAddress ? dto.walletAddress : undefined;
 
@@ -128,15 +166,18 @@ export class AuthService {
         }
 
         if (user) {
+          const indexerStateId = await this.resolveIndexerStateId(chainId);
           await this.prisma.nonceConnect.upsert({
             where: { user_id: user.id },
             create: {
               id: generateUlid(),
               nonce,
               user_id: user.id,
+              indexer_state_id: indexerStateId,
             },
             update: {
               nonce,
+              indexer_state_id: indexerStateId,
             },
           });
         }
@@ -168,10 +209,13 @@ export class AuthService {
 
   async verifySignature(
     dto: VerifySignatureDto,
+    chainId?: number,
   ): Promise<VerifySignatureResponse> {
     const walletAddress = dto.walletAddress;
     let messageToVerify = dto.message;
     let storedNonce: string | undefined = dto.nonce;
+
+    const indexerStateId = await this.resolveIndexerStateId(chainId);
 
     try {
       const user = await this.prisma.user.findFirst({
@@ -183,8 +227,19 @@ export class AuthService {
         },
         include: { nonce_connect: true },
       });
-      if (user?.nonce_connect?.nonce) {
-        storedNonce = user.nonce_connect.nonce;
+      const nonceConnect = user?.nonce_connect ?? null;
+      if (nonceConnect?.nonce) {
+        // Only accept the stored nonce when it belongs to the requested chain.
+        // Legacy rows (or chains without an indexer state) keep a null link and
+        // are treated as chain-agnostic so the login flow never hard-fails.
+        const matchesChain =
+          chainId === undefined ||
+          indexerStateId === null ||
+          nonceConnect.indexer_state_id == null ||
+          nonceConnect.indexer_state_id === indexerStateId;
+        if (matchesChain) {
+          storedNonce = nonceConnect.nonce;
+        }
       }
     } catch (dbError) {
       this.logger.warn(`Could not query database for stored nonce: ${dbError}`);

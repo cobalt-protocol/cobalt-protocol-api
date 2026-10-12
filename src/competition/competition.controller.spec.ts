@@ -42,7 +42,6 @@ describe('CompetitionController', () => {
     findPrizeWinners: vi.fn(),
     getTokenPrizeByCompetitionId: vi.fn(),
     findSignatureCertificateParticipant: vi.fn(),
-    createTeam: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -251,43 +250,6 @@ describe('CompetitionController', () => {
     });
   });
 
-  describe('createTeam', () => {
-    it('should create a team for a competition', async () => {
-      const mockTeamResponse = {
-        data: {
-          id: 'team-1',
-          name: 'Test Team',
-          visibility: true,
-          description: 'Team description',
-          competition_id: 'comp-1',
-          user_id: 'user-1',
-          team_code: 'COBALT-123456',
-          team_codes: [{ id: 'tc-1', code: 'COBALT-123456' }],
-          skills_team: [{ id: 'sk-1', name: 'React' }],
-          created_at: new Date(),
-        },
-        message: 'Team created successfully',
-        errors: null,
-      };
-      mockCompetitionService.createTeam.mockResolvedValue(mockTeamResponse);
-
-      const dto = {
-        name: 'Test Team',
-        visibility: true,
-        description: 'Team description',
-        skills_team: ['React'],
-      };
-
-      const result = await controller.createTeam('comp-1', 'Bearer token', dto);
-
-      expect(mockCompetitionService.createTeam).toHaveBeenCalledWith(
-        'comp-1',
-        'Bearer token',
-        dto,
-      );
-      expect(result).toEqual(mockTeamResponse);
-    });
-  });
 
   describe('findSignatureCertificateParticipant', () => {
     it('should return signature certificate participant record with explicit teamId', async () => {

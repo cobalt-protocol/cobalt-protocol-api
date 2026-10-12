@@ -1,4 +1,10 @@
-import { encodePacked, getAddress, isAddress, keccak256, stringToHex } from 'viem';
+import {
+  encodePacked,
+  getAddress,
+  isAddress,
+  keccak256,
+  stringToHex,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 export function deriveNumericTeamId(teamId: string): bigint {
@@ -16,13 +22,11 @@ export function deriveNumericTeamId(teamId: string): bigint {
 export function getCompetitionContractAddress(): `0x${string}` {
   const raw = process.env.COMPETITION_CONTRACT;
   if (!raw || !isAddress(raw)) {
-    // do not silently fallback to stale address — throw to surface misconfig
-    // fallback kept only for local dev without env, but logged as warning by caller if needed
-    const fallback = '0xb82F97deF35a9fe438ceB41f4fB5145514b18069' as `0x${string}`;
+    // Unified canonical CompetitionManager on BotChain testnet
+    // Must match web NEXT_PUBLIC_COMPETITION_CONTRACT=0xD9e56794a88F4Ad06B46d6e13712900103AC1e44
+    const fallback =
+      '0xD9e56794a88F4Ad06B46d6e13712900103AC1e44' as `0x${string}`;
     if (!raw) {
-      // if COMPETITION_CONTRACT is not set, use deployed address from .env.example / web .env
-      // throw instead of silently using 0x18c9... which will always mismatch
-      // keep fallback to deployed address to avoid hard crash in tests
       return fallback;
     }
     throw new Error(`Invalid COMPETITION_CONTRACT address: ${raw}`);
@@ -34,7 +38,9 @@ export function getSignerAccount() {
   const rawPrivateKey =
     process.env.PRIVATE_KEY_SIGNER ||
     '6e21894af5b0ff3b4dc3659ad7a0df21a9070be22d24b35698632294756fd9cc';
-  const formatted = (rawPrivateKey.startsWith('0x') ? rawPrivateKey : `0x${rawPrivateKey}`) as `0x${string}`;
+  const formatted = (
+    rawPrivateKey.startsWith('0x') ? rawPrivateKey : `0x${rawPrivateKey}`
+  ) as `0x${string}`;
   if (!/^0x[0-9a-fA-F]{64}$/.test(formatted)) {
     throw new Error('Invalid PRIVATE_KEY_SIGNER format');
   }
@@ -56,7 +62,13 @@ export function hashParticipantCertificate(
   return keccak256(
     encodePacked(
       ['address', 'address', 'uint256', 'uint256', 'string'],
-      [contractAddress, participantAddress, onchainCompetitionId, numericTeamId, certificateCidRaw],
+      [
+        contractAddress,
+        participantAddress,
+        onchainCompetitionId,
+        numericTeamId,
+        certificateCidRaw,
+      ],
     ),
   );
 }
@@ -80,7 +92,35 @@ export function hashWinnerCertificate(
   );
 }
 
-export async function signHashWithSigner(hash: `0x${string}`): Promise<`0x${string}`> {
+/**
+ * Must match CompetitionManager.setWinner / CompetitionHelper.verifySig:
+ * keccak256(abi.encodePacked(address(this), _winnerId, _participant, _competitionId, _teamId))
+ * _participant = team LEAD wallet address (checksum)
+ */
+export function hashSetWinner(
+  contractAddress: `0x${string}`,
+  winnerId: bigint,
+  participantAddress: `0x${string}`,
+  onchainCompetitionId: bigint,
+  numericTeamId: bigint,
+): `0x${string}` {
+  return keccak256(
+    encodePacked(
+      ['address', 'uint256', 'address', 'uint256', 'uint256'],
+      [
+        contractAddress,
+        winnerId,
+        participantAddress,
+        onchainCompetitionId,
+        numericTeamId,
+      ],
+    ),
+  );
+}
+
+export async function signHashWithSigner(
+  hash: `0x${string}`,
+): Promise<`0x${string}`> {
   const account = getSignerAccount();
   const signature = await account.signMessage({ message: { raw: hash } });
   return signature as `0x${string}`;

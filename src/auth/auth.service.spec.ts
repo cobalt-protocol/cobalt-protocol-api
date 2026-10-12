@@ -33,6 +33,9 @@ describe('AuthService', () => {
       upsert: vi.fn(),
       deleteMany: vi.fn(),
     },
+    indexerState: {
+      findFirst: vi.fn(),
+    },
   };
 
   const mockJwtService = {
@@ -95,14 +98,52 @@ describe('AuthService', () => {
         create: expect.objectContaining({
           nonce: result.data.nonce,
           user_id: mockUser.id,
+          indexer_state_id: null,
         }),
         update: {
           nonce: result.data.nonce,
+          indexer_state_id: null,
         },
       });
       expect(result.data.user).toEqual(mockUser);
       expect(result.message).toBe('Nonce generated successfully');
       expect(result.errors).toBeNull();
+    });
+
+    it('should link the nonce to the indexer state for the given chain id', async () => {
+      const walletAddress = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.indexerState.findFirst.mockResolvedValue({
+        id: 'indexer-state-1',
+      });
+      mockPrismaService.nonceConnect.upsert.mockResolvedValue({
+        id: 'nonce-1',
+        nonce: 'abc',
+        user_id: mockUser.id,
+        indexer_state_id: 'indexer-state-1',
+      });
+
+      const result = await service.generateNonce({ walletAddress }, 968);
+
+      expect(mockPrismaService.indexerState.findFirst).toHaveBeenCalledWith({
+        where: {
+          contract_name: 'CompetitionManager',
+          chain_id: 968,
+        },
+        select: { id: true },
+      });
+      expect(mockPrismaService.nonceConnect.upsert).toHaveBeenCalledWith({
+        where: { user_id: mockUser.id },
+        create: expect.objectContaining({
+          nonce: result.data.nonce,
+          user_id: mockUser.id,
+          indexer_state_id: 'indexer-state-1',
+        }),
+        update: {
+          nonce: result.data.nonce,
+          indexer_state_id: 'indexer-state-1',
+        },
+      });
     });
   });
 

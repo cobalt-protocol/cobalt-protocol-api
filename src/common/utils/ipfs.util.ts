@@ -8,7 +8,9 @@ const logger = new Logger('IpfsUtil');
  * Mirrors the web Kubo upload used in `cobalt-protocol-web/app/api/ipfs/route.ts` but for JSON metadata.
  * Falls back to deterministic CID in test env when Kubo is unreachable.
  */
-export async function pinJsonToIpfs(metadata: Record<string, unknown>): Promise<string> {
+export async function pinJsonToIpfs(
+  metadata: Record<string, unknown>,
+): Promise<string> {
   const jsonStr = JSON.stringify(metadata);
   const endpoint =
     process.env.KUBO_API_URL ||
@@ -49,7 +51,8 @@ export async function pinJsonToIpfs(metadata: Record<string, unknown>): Promise<
       throw new Error(`Failed to parse Kubo IPFS response: ${text}`);
     }
 
-    const cid: string = data.Hash || data.Cid?.['/'] || data.cid || data.Hash || '';
+    const cid: string =
+      data.Hash || data.Cid?.['/'] || data.cid || data.Hash || '';
     if (!cid) {
       throw new Error(`No CID returned from Kubo IPFS: ${text}`);
     }
@@ -61,15 +64,21 @@ export async function pinJsonToIpfs(metadata: Record<string, unknown>): Promise<
       !!process.env.VITEST ||
       process.env.SKIP_IPFS_PIN === 'true';
     if (isTest) {
-      logger.warn(`IPFS pin failed, falling back to deterministic CID (test mode): ${e?.message || e}`);
+      logger.warn(
+        `IPFS pin failed, falling back to deterministic CID (test mode): ${e?.message || e}`,
+      );
       // deterministic fake CID derived from hash — not a real IPFS CID but stable for tests
       const hash = keccak256(stringToHex(jsonStr));
       // take 44 chars hex after 0x to mimic CID length, prefix with Qm/bafy
       const fake = `bafy${hash.slice(2, 46)}`;
       return fake;
     }
-    logger.error(`Failed to pin JSON to IPFS (${normalized}/api/v0/add): ${e?.message || e}`);
-    throw new Error(`Failed to pin certificate metadata to IPFS: ${e?.message || e}`);
+    logger.error(
+      `Failed to pin JSON to IPFS (${normalized}/api/v0/add): ${e?.message || e}`,
+    );
+    throw new Error(
+      `Failed to pin certificate metadata to IPFS: ${e?.message || e}`,
+    );
   }
 }
 
