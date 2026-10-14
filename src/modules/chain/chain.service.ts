@@ -55,6 +55,12 @@ export class ChainService {
           },
         },
         indexer_state: true,
+        teams: {
+          where: {
+            deleted_at: null,
+            visibility: true,
+          },
+        },
       },
       orderBy: {
         created_at: 'desc',
@@ -67,8 +73,57 @@ export class ChainService {
       );
     }
 
+    const competitionIds = competitions.map((c) => c.id);
+
+    const teamStats = await this.prisma.team.findMany({
+      where: {
+        competition_id: { in: competitionIds },
+        deleted_at: null,
+      },
+      select: {
+        id: true,
+        competition_id: true,
+        _count: {
+          select: {
+            team_roles: {
+              where: {
+                deleted_at: null,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const statsMap = new Map<
+      string,
+      { total_teams: number; total_participant: number }
+    >();
+
+    for (const team of teamStats) {
+      const current = statsMap.get(team.competition_id) ?? {
+        total_teams: 0,
+        total_participant: 0,
+      };
+      current.total_teams += 1;
+      current.total_participant += team._count?.team_roles ?? 0;
+      statsMap.set(team.competition_id, current);
+    }
+
+    const formattedCompetitions = competitions.map((competition) => {
+      const stats = statsMap.get(competition.id) ?? {
+        total_teams: 0,
+        total_participant: 0,
+      };
+      return {
+        ...competition,
+        total_teams: stats.total_teams,
+        total_participant: stats.total_participant,
+      };
+    });
+
     return {
-      data: competitions,
+      data: formattedCompetitions,
       message: 'Competitions retrieved successfully',
       errors: null,
     };

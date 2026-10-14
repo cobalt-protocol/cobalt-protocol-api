@@ -32,6 +32,7 @@ describe('ChainService', () => {
     }),
     team: {
       create: vi.fn(),
+      findMany: vi.fn(),
     },
     teamRole: {
       findMany: vi.fn(),
@@ -82,12 +83,29 @@ describe('ChainService', () => {
           },
           prize_winners: [],
           prize_deposits: [],
+          teams: [
+            {
+              id: '01J8Z9TEAM000000000000001',
+              name: 'Alpha Team',
+              visibility: true,
+              deleted_at: null,
+            },
+          ],
         },
       ];
 
       mockPrismaService.competition.findMany.mockResolvedValue(
         mockCompetitions,
       );
+      mockPrismaService.team.findMany.mockResolvedValue([
+        {
+          id: '01J8Z9TEAM000000000000001',
+          competition_id: '01J8Z9X0000000000000000001',
+          _count: {
+            team_roles: 3,
+          },
+        },
+      ]);
 
       const result = await service.getCompetitionsByChainId(11155111);
 
@@ -113,14 +131,46 @@ describe('ChainService', () => {
             },
           },
           indexer_state: true,
+          teams: {
+            where: {
+              deleted_at: null,
+              visibility: true,
+            },
+          },
         },
         orderBy: {
           created_at: 'desc',
         },
       });
 
+      expect(mockPrismaService.team.findMany).toHaveBeenCalledWith({
+        where: {
+          competition_id: { in: ['01J8Z9X0000000000000000001'] },
+          deleted_at: null,
+        },
+        select: {
+          id: true,
+          competition_id: true,
+          _count: {
+            select: {
+              team_roles: {
+                where: {
+                  deleted_at: null,
+                },
+              },
+            },
+          },
+        },
+      });
+
       expect(result).toEqual({
-        data: mockCompetitions,
+        data: [
+          {
+            ...mockCompetitions[0],
+            total_teams: 1,
+            total_participant: 3,
+          },
+        ],
         message: 'Competitions retrieved successfully',
         errors: null,
       });
