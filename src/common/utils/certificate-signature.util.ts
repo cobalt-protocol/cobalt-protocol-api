@@ -23,9 +23,9 @@ export function getCompetitionContractAddress(): `0x${string}` {
   const raw = process.env.COMPETITION_CONTRACT;
   if (!raw || !isAddress(raw)) {
     // Unified canonical CompetitionManager on BotChain testnet
-    // Must match web NEXT_PUBLIC_COMPETITION_CONTRACT=0xD9e56794a88F4Ad06B46d6e13712900103AC1e44
+    // Must match web NEXT_PUBLIC_COMPETITION_CONTRACT=0x9e6b43620BfE855f48535229304820C9d8D779F5
     const fallback =
-      '0xD9e56794a88F4Ad06B46d6e13712900103AC1e44' as `0x${string}`;
+      '0x9e6b43620BfE855f48535229304820C9d8D779F5' as `0x${string}`;
     if (!raw) {
       return fallback;
     }

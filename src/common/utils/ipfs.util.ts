@@ -84,40 +84,115 @@ export async function pinJsonToIpfs(
 
 /**
  * Build the participant certificate JSON metadata as required:
- * - title_project        <- submission_project.title
- * - description_project  <- submission_project.description
- * - submission_link      <- submission_project.submission_link
- * - document_cid         <- submission_project.document_cid (raw CID)
- * - title                <- competition.name
- * - description          <- competition.description
- * - image                <- competition.certificate_cid as ipfs://<cid>
+ * - title        <- competition.name
+ * - description  <- competition.description
+ * - image        <- competition.certificate_cid formatted as ipfs://<cid>
+ * - project      <- submission_project attributes (including submission_link) excluding created_at, updated_at, deleted_at, team_id
+ * - team         <- team attributes excluding created_at, updated_at, deleted_at
  */
 export function buildParticipantCertificateMetadata(params: {
   submission: {
+    id?: string;
     title: string;
     description?: string | null;
     submission_link: string;
     document_cid: string;
+    team_id?: string;
+    created_at?: any;
+    updated_at?: any;
+    deleted_at?: any;
+    [key: string]: any;
   };
   competition: {
     name: string;
     description: string;
-    certificate_cid: string;
+    certificate_cid?: string | null;
+    [key: string]: any;
   };
+  team?: {
+    id?: string;
+    name?: string;
+    visibility?: boolean;
+    description?: string;
+    competition_id?: string;
+    user_id?: string;
+    tx_hash?: string | null;
+    created_at?: any;
+    updated_at?: any;
+    deleted_at?: any;
+    [key: string]: any;
+  } | null;
 }): Record<string, unknown> {
-  const documentCid = params.submission.document_cid?.trim() ?? '';
-  const certCid = params.competition.certificate_cid?.trim() ?? '';
-  return {
-    title_project: params.submission.title,
-    description_project: params.submission.description ?? null,
+  const rawCertCid = params.competition.certificate_cid?.trim() ?? '';
+  const cleanCertCid = rawCertCid.replace(/^ipfs:\/\//, '').trim();
+  const image = cleanCertCid ? `ipfs://${cleanCertCid}` : '';
+
+  const {
+    created_at,
+    updated_at,
+    deleted_at,
+    team_id,
+    team: _submissionTeam,
+    ...restSubmission
+  } = params.submission;
+
+  const project: Record<string, any> = {
+    ...restSubmission,
+    id: params.submission.id,
+    title: params.submission.title,
+    description: params.submission.description ?? null,
     submission_link: params.submission.submission_link,
-    document_cid: documentCid,
-    // keep also ipfs uri variant for convenience
-    document_uri: documentCid ? `ipfs://${documentCid}` : null,
+    document_cid: params.submission.document_cid,
+  };
+
+  delete project.created_at;
+  delete project.updated_at;
+  delete project.deleted_at;
+  delete project.team_id;
+  delete project.team;
+
+  let teamData: Record<string, any> | undefined;
+  if (params.team) {
+    const {
+      created_at: _tc,
+      updated_at: _tu,
+      deleted_at: _td,
+      team_roles: _tr,
+      competition: _comp,
+      submission_project: _sp,
+      request_joins: _rj,
+      requirements_team: _rt,
+      skills_team: _st,
+      certificate_participant_minteds: _cpm,
+      certificate_participant_winner_minteds: _cpwm,
+      signature_certificate_participants: _scp,
+      signature_certificate_winners: _scw,
+      signature_set_winner: _ssw,
+      ...restTeam
+    } = params.team;
+
+    teamData = {
+      ...restTeam,
+      id: params.team.id,
+      name: params.team.name,
+      visibility: params.team.visibility,
+      description: params.team.description,
+      competition_id: params.team.competition_id,
+      user_id: params.team.user_id,
+      tx_hash: params.team.tx_hash ?? null,
+    };
+    delete teamData.created_at;
+    delete teamData.updated_at;
+    delete teamData.deleted_at;
+    delete teamData.team_roles;
+  }
+
+  return {
     title: params.competition.name,
+    name: params.competition.name,
     description: params.competition.description,
-    image: certCid ? `ipfs://${certCid}` : '',
-    // raw image cid kept for debugging / on-chain reference
-    certificate_cid: certCid,
+    image,
+    project,
+    team: teamData ?? null,
   };
 }

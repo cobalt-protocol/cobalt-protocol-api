@@ -15,13 +15,10 @@ import {
   hashParticipantCertificate,
   signHashWithSigner,
 } from '../../common/utils/certificate-signature.util.js';
-import { buildParticipantCertificateMetadata } from '../../common/utils/ipfs.util.js';
-
-// Hardcoded CID (raw, tanpa prefix ipfs://) untuk CompetitionManager.safeMintCertificateParticipant(_cid)
-// HARUS 1:1 dengan cobalt-protocol-smart-contract/scripts/competitions/claim_certificate_participant.py HARDCODED_CID
-// Ganti via env PARTICIPANT_CERTIFICATE_CID atau langsung di konstanta ini. Contoh: bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi
-const HARDCODED_PARTICIPANT_CID_RAW_FALLBACK =
-  'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+import {
+  buildParticipantCertificateMetadata,
+  pinJsonToIpfs,
+} from '../../common/utils/ipfs.util.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UpdateChainTeamDto } from './dto/update-chain-team.dto.js';
 import { CreateSubmissionDto } from './dto/create-submission.dto.js';
@@ -1483,19 +1480,23 @@ export class ChainService {
     })();
     const submission: any = (await (this.prisma as any).submissionProject?.findFirst?.({ where: { team_id: team.id, deleted_at: null } })) ?? null;
     if (!submission) throw new BadRequestException('Team has not submitted any project yet (submission_project is empty)');
-    // Metadata untuk response/debug saja — CID untuk hash HARUS hardcoded 1:1 dengan claim_certificate_participant.py HARDCODED_CID
     const metadata = buildParticipantCertificateMetadata({
-      submission: { title: submission.title, description: submission.description ?? null, submission_link: submission.submission_link, document_cid: submission.document_cid },
-      competition: { name: competition.name, description: competition.description, certificate_cid: competition.certificate_cid ?? '' },
+      submission,
+      competition,
+      team,
     });
-    // Hardcoded CID — CompetitionManager sekarang butuh _cid eksplisit (raw tanpa ipfs://)
-    // Hash = keccak256(abi.encodePacked(address(this), msg.sender, _competitionId, _teamId, _cid)) — sama persis dengan script claim
-    const effectiveCidRaw = (process.env.PARTICIPANT_CERTIFICATE_CID?.trim() || HARDCODED_PARTICIPANT_CID_RAW_FALLBACK).replace(/^ipfs:\/\//, '').trim();
-    if (!effectiveCidRaw) throw new BadRequestException('PARTICIPANT_CERTIFICATE_CID empty — set env PARTICIPANT_CERTIFICATE_CID or HARDCODED_PARTICIPANT_CID_RAW_FALLBACK');
-    if (competition.certificate_cid && effectiveCidRaw !== String(competition.certificate_cid).trim().replace(/^ipfs:\/\//, '').trim()) {
-      this.logger.warn(`Hardcoded CID '${effectiveCidRaw}' differs from on-chain competition.certificate_cid '${competition.certificate_cid}' — hash uses hardcoded (claim script)`);
+
+    let metadataCidRaw: string;
+    try {
+      metadataCidRaw = await pinJsonToIpfs(metadata);
+    } catch (e: any) {
+      this.logger.error(
+        `Failed to pin participant certificate metadata to IPFS: ${e?.message || e}`,
+      );
+      throw new BadRequestException(
+        e?.message || 'Failed to pin certificate metadata to IPFS',
+      );
     }
-    const metadataCidRaw = effectiveCidRaw;
     let contractChecksum: `0x${string}`;
     try { contractChecksum = getCompetitionContractAddress(); } catch (e: any) {
       throw new BadRequestException(e?.message || 'Invalid COMPETITION_CONTRACT');

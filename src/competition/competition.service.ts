@@ -823,17 +823,9 @@ export class CompetitionService {
     // - description          <- competition.description
     // - image                <- ipfs:// + competition.certificate_cid
     const metadata = buildParticipantCertificateMetadata({
-      submission: {
-        title: submission.title,
-        description: submission.description ?? null,
-        submission_link: submission.submission_link,
-        document_cid: submission.document_cid,
-      },
-      competition: {
-        name: competition.name,
-        description: competition.description,
-        certificate_cid: competition.certificate_cid ?? '',
-      },
+      submission,
+      competition,
+      team,
     });
 
     // Pin metadata JSON to IPFS to obtain CID (raw, without ipfs:// prefix)
