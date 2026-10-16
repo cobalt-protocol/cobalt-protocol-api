@@ -850,13 +850,12 @@ export class CompetitionService {
       );
     }
     const participantChecksum = getAddress(user.wallet_address);
-    const numericTeamId = deriveNumericTeamId(team.id);
     // hash uses the newly pinned metadata CID (raw) — matches safeMintCertificateParticipant(_cid) on-chain
     const msgHash = hashParticipantCertificate(
       contractChecksum,
       participantChecksum,
       onchainCompId,
-      numericTeamId,
+      team.id,
       metadataCidRaw,
     );
     let signature: `0x${string}`;

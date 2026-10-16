@@ -50,23 +50,24 @@ export function getSignerAccount() {
 /**
  * Must match CompetitionManager.safeMintCertificateParticipant:
  * keccak256(abi.encodePacked(address(this), msg.sender, _competitionId, _teamId, cid))
+ * _teamId = string
  * cid = competition.certificateCID raw (no ipfs:// prefix)
  */
 export function hashParticipantCertificate(
   contractAddress: `0x${string}`,
   participantAddress: `0x${string}`,
   onchainCompetitionId: bigint,
-  numericTeamId: bigint,
+  teamId: string,
   certificateCidRaw: string,
 ): `0x${string}` {
   return keccak256(
     encodePacked(
-      ['address', 'address', 'uint256', 'uint256', 'string'],
+      ['address', 'address', 'uint256', 'string', 'string'],
       [
         contractAddress,
         participantAddress,
         onchainCompetitionId,
-        numericTeamId,
+        teamId,
         certificateCidRaw,
       ],
     ),
@@ -96,23 +97,24 @@ export function hashWinnerCertificate(
  * Must match CompetitionManager.setWinner / CompetitionHelper.verifySig:
  * keccak256(abi.encodePacked(address(this), _winnerId, _participant, _competitionId, _teamId))
  * _participant = team LEAD wallet address (checksum)
+ * _teamId = string
  */
 export function hashSetWinner(
   contractAddress: `0x${string}`,
   winnerId: bigint,
   participantAddress: `0x${string}`,
   onchainCompetitionId: bigint,
-  numericTeamId: bigint,
+  teamId: string,
 ): `0x${string}` {
   return keccak256(
     encodePacked(
-      ['address', 'uint256', 'address', 'uint256', 'uint256'],
+      ['address', 'uint256', 'address', 'uint256', 'string'],
       [
         contractAddress,
         winnerId,
         participantAddress,
         onchainCompetitionId,
-        numericTeamId,
+        teamId,
       ],
     ),
   );

@@ -1502,8 +1502,7 @@ export class ChainService {
       throw new BadRequestException(e?.message || 'Invalid COMPETITION_CONTRACT');
     }
     const participantChecksum = getAddress(user.wallet_address);
-    const numericTeamId = deriveNumericTeamId(team.id);
-    const msgHash = hashParticipantCertificate(contractChecksum, participantChecksum, onchainCompId, numericTeamId, metadataCidRaw);
+    const msgHash = hashParticipantCertificate(contractChecksum, participantChecksum, onchainCompId, team.id, metadataCidRaw);
     let signature: `0x${string}`;
     try { signature = await signHashWithSigner(msgHash); } catch (e: any) {
       this.logger.error(`Failed to sign participant certificate hash: ${e}`);

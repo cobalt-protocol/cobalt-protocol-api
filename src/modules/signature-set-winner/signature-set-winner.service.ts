@@ -100,8 +100,7 @@ export class SignatureSetWinnerService {
       throw new BadRequestException(e?.message || 'Invalid COMPETITION_CONTRACT');
     }
 
-    const numericTeamId = deriveNumericTeamId(team.id);
-    const msgHash = hashSetWinner(contractChecksum, winnerId, participantChecksum, onchainCompetitionId, numericTeamId);
+    const msgHash = hashSetWinner(contractChecksum, winnerId, participantChecksum, onchainCompetitionId, team.id);
 
     let signature: `0x${string}`;
     try {
@@ -141,7 +140,8 @@ export class SignatureSetWinnerService {
         participant_user_id: leadUser.id,
         contract_address: contractChecksum,
         chain_id: chainId,
-        numeric_team_id: numericTeamId.toString(),
+        team_id: team.id,
+        numeric_team_id: team.id,
         competition_onchain_id: onchainCompetitionId.toString(),
         hash: msgHash,
       },
