@@ -390,6 +390,44 @@ export class ChainService {
       );
     }
 
+    // Guard: Check if team already exists for this user in this competition (e.g. created by indexer via on-chain payment or previous call)
+    const existingTeam = await this.prisma.team.findFirst({
+      where: {
+        competition_id: competition.id,
+        user_id: user.id,
+        deleted_at: null,
+      },
+      include: {
+        skills_team: { where: { deleted_at: null } },
+        requirements_team: true,
+        team_codes: { where: { deleted_at: null } },
+        team_roles: { where: { deleted_at: null }, include: { user: true } },
+      },
+    });
+
+    if (existingTeam) {
+      const existingCode = existingTeam.team_codes?.[0]?.code ?? null;
+      return {
+        data: {
+          id: existingTeam.id,
+          name: existingTeam.name,
+          visibility: existingTeam.visibility,
+          description: existingTeam.description,
+          competition_id: existingTeam.competition_id,
+          user_id: existingTeam.user_id,
+          team_code: existingCode,
+          team_codes: existingTeam.team_codes,
+          skills_team: existingTeam.skills_team,
+          requirements_team: existingTeam.requirements_team,
+          team_roles: existingTeam.team_roles,
+          created_at: existingTeam.created_at,
+          updated_at: existingTeam.updated_at,
+        },
+        message: 'Team already exists for this competition',
+        errors: null,
+      };
+    }
+
     const isPrivate = !dto.visibility;
     const { randomBytes } = await import('crypto');
     const teamCodeStr = isPrivate
