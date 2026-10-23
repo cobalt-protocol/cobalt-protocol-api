@@ -360,6 +360,126 @@ export class ChainService {
     };
   }
 
+  async getParticipantWinnersByChainIdAndCompetitionId(
+    chainId: number,
+    competitionId: string,
+  ) {
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [{ id: competitionId }, { competition_id: competitionId }],
+        deleted_at: null,
+        indexer_state: {
+          chain_id: chainId,
+        },
+      },
+      select: {
+        id: true,
+        competition_id: true,
+      },
+    });
+
+    if (!competition) {
+      throw new NotFoundException(
+        `Competition with ID ${competitionId} not found on chain ID ${chainId}`,
+      );
+    }
+
+    const participantWinners = await this.prisma.participantWinner.findMany({
+      where: {
+        competition_id: competition.id,
+        deleted_at: null,
+      },
+      include: {
+        prize_winner: true,
+      },
+      orderBy: {
+        created_at: 'asc',
+      },
+    });
+
+    const participantWallets = participantWinners
+      .map((pw) => pw.participant)
+      .filter((p): p is string => Boolean(p));
+
+    const users = participantWallets.length > 0
+      ? await this.prisma.user.findMany({
+          where: {
+            wallet_address: {
+              in: participantWallets,
+              mode: 'insensitive',
+            },
+            deleted_at: null,
+          },
+          select: {
+            id: true,
+            wallet_address: true,
+            username: true,
+            email: true,
+            location: true,
+            institution: true,
+          },
+        })
+      : [];
+
+    const teams = await this.prisma.team.findMany({
+      where: {
+        competition_id: competition.id,
+        deleted_at: null,
+      },
+      include: {
+        team_roles: {
+          where: { deleted_at: null },
+        },
+      },
+    });
+
+    const data = participantWinners.map((pw) => {
+      const user = users.find(
+        (u) => u.wallet_address.toLowerCase() === pw.participant.toLowerCase(),
+      ) || null;
+
+      const team = teams.find(
+        (t) =>
+          (user && t.user_id === user.id) ||
+          (user && t.team_roles.some((r) => r.user_id === user.id)),
+      );
+
+      return {
+        id: pw.id,
+        tx_hash: pw.tx_hash,
+        participant: pw.participant,
+        title: pw.title,
+        competition_id: pw.competition_id,
+        prize_winner_id: pw.prize_winner_id ? pw.prize_winner_id.toString() : null,
+        created_at: pw.created_at,
+        updated_at: pw.updated_at,
+        deleted_at: pw.deleted_at,
+        user,
+        prize_winner: pw.prize_winner
+          ? {
+              ...pw.prize_winner,
+              winner_id: pw.prize_winner.winner_id ? pw.prize_winner.winner_id.toString() : null,
+              amount: pw.prize_winner.amount ? pw.prize_winner.amount.toString() : '0',
+            }
+          : null,
+        team: team
+          ? {
+              id: team.id,
+              name: team.name,
+              visibility: team.visibility,
+              description: team.description,
+            }
+          : null,
+      };
+    });
+
+    return {
+      data,
+      message: 'Participant winners retrieved successfully',
+      errors: null,
+    };
+  }
+
   async createTeam(
     userId: string,
     chainId: number,

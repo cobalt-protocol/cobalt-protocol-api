@@ -31,7 +31,7 @@ describe('ChainController', () => {
         prize_winners: [],
         indexer_state: {
           id: '01J8Z9X0000000000000000099',
-          contract_name: 'CobaltCompetition',
+          contract_address: '0x442504332db0d8F3c31090d8E690EBe6c0212A9d',
           chain_id: 11155111,
           last_scanned_block: 100,
         },

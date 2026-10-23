@@ -461,6 +461,32 @@ export class CompetitionController {
     );
   }
 
+  @Get(':id/participant-winners')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get participant winners by competition ID',
+    description:
+      'GET api/v1/competitions/:id/participant-winners — returns rows from table `participant_winner` where `competition_id = :id` (supports ULID `competition.id` or on-chain `competition.competition_id`) AND `deleted_at IS NULL`. Includes user profile, prize_winner details, and team info. Returns empty array if none yet.',
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    description: 'Competition ID (ULID or on-chain competition_id)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Participant winners retrieved successfully (data = ParticipantWinner[]; empty array if none yet)',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found',
+  })
+  async getParticipantWinners(@Param('id') id: string) {
+    return this.competitionService.getParticipantWinnersByCompetitionId(id);
+  }
+
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

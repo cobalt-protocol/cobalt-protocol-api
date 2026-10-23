@@ -248,6 +248,40 @@ export class ChainController {
     return this.chainService.getPrizeWinnersByChainIdAndCompetitionId(chainId, id);
   }
 
+  @Get(':chain_id/competitions/:id/participant-winners')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get participant winners by chain ID and competition ID',
+    description:
+      'GET api/v1/chains/:chain_id/competitions/:id/participant-winners — returns rows from table `participant_winner` where `competition_id = :id` (supports ULID `competition.id` or on-chain `competition.competition_id`) AND `deleted_at IS NULL` AND `competition.indexer_state.chain_id = :chain_id`. Includes user profile, prize_winner details, and team info. Returns empty array if none yet.',
+  })
+  @ApiParam({
+    name: 'chain_id',
+    required: true,
+    description: 'Chain ID (matched via competition.indexer_state.chain_id)',
+    type: Number,
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    description: 'Competition ID (ULID or on-chain competition_id)',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Participant winners retrieved successfully (data = ParticipantWinner[]; empty array if none yet)',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found on chain',
+  })
+  async getParticipantWinnersByChainIdAndCompetitionId(
+    @Param('chain_id', ParseIntPipe) chainId: number,
+    @Param('id') id: string,
+  ) {
+    return this.chainService.getParticipantWinnersByChainIdAndCompetitionId(chainId, id);
+  }
+
   @Post(':chain_id/competitions/:competition_id/join-teams')
   @UseGuards(AuthSessionGuard)
   @HttpCode(HttpStatus.CREATED)

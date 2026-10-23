@@ -124,12 +124,8 @@ export class SignatureSetWinnerService {
         } as any,
       });
     } else {
-      const needsUpdate = existing.signature !== signature || existing.user_id !== leadUser.id || existing.competition_id !== competition.id || (indexerStateId && existing.indexer_state_id !== indexerStateId);
-      if (needsUpdate) {
-        row = await (this.prisma as any).signatureSetWinner.update({ where: { id: existing.id } as any, data: { signature, user_id: leadUser.id, competition_id: competition.id, ...(indexerStateId ? { indexer_state_id: indexerStateId } : {}) } as any });
-      } else {
-        row = existing;
-      }
+      // Do not replace an existing signature; return the stored row as-is.
+      row = existing;
     }
 
     return {

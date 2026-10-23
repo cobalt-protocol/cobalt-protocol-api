@@ -87,8 +87,8 @@ export async function pinJsonToIpfs(
  * - title        <- competition.name
  * - description  <- competition.description
  * - image        <- competition.certificate_cid formatted as ipfs://<cid>
- * - project      <- submission_project attributes (including submission_link) excluding created_at, updated_at, deleted_at, team_id
- * - team         <- team attributes excluding created_at, updated_at, deleted_at
+ * - project      <- submission_project attributes (including submission_link) excluding id, created_at, updated_at, deleted_at, team_id
+ * - team         <- team attributes excluding id, created_at, updated_at, deleted_at
  */
 export function buildParticipantCertificateMetadata(params: {
   submission: {
@@ -128,6 +128,7 @@ export function buildParticipantCertificateMetadata(params: {
   const image = cleanCertCid ? `ipfs://${cleanCertCid}` : '';
 
   const {
+    id: _projId,
     created_at,
     updated_at,
     deleted_at,
@@ -138,13 +139,13 @@ export function buildParticipantCertificateMetadata(params: {
 
   const project: Record<string, any> = {
     ...restSubmission,
-    id: params.submission.id,
     title: params.submission.title,
     description: params.submission.description ?? null,
     submission_link: params.submission.submission_link,
     document_cid: params.submission.document_cid,
   };
 
+  delete project.id;
   delete project.created_at;
   delete project.updated_at;
   delete project.deleted_at;
@@ -154,6 +155,7 @@ export function buildParticipantCertificateMetadata(params: {
   let teamData: Record<string, any> | undefined;
   if (params.team) {
     const {
+      id: _teamId,
       created_at: _tc,
       updated_at: _tu,
       deleted_at: _td,
@@ -173,7 +175,6 @@ export function buildParticipantCertificateMetadata(params: {
 
     teamData = {
       ...restTeam,
-      id: params.team.id,
       name: params.team.name,
       visibility: params.team.visibility,
       description: params.team.description,
@@ -181,6 +182,7 @@ export function buildParticipantCertificateMetadata(params: {
       user_id: params.team.user_id,
       tx_hash: params.team.tx_hash ?? null,
     };
+    delete teamData.id;
     delete teamData.created_at;
     delete teamData.updated_at;
     delete teamData.deleted_at;
@@ -192,6 +194,8 @@ export function buildParticipantCertificateMetadata(params: {
     name: params.competition.name,
     description: params.competition.description,
     image,
+    competition_contract: params.competition.indexer_state?.contract_address ?? null,
+    competition_tx_hash: params.competition.tx_hash ?? null,
     project,
     team: teamData ?? null,
   };

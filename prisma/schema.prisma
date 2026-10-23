@@ -23,7 +23,7 @@ model User {
   competitions                           Competition[]
   nonce_connect                          NonceConnect?
   organizations                          Organization[]
-  participant_winner                     ParticipantWinner?
+  participant_winners                    ParticipantWinner[]
   request_joins                          RequestJoin[]
   signature_certificate_participants     SignatureCertificateParticipant[]
   signature_certificate_winners          SignatureCertificateWinner[]
@@ -412,9 +412,8 @@ model CompetitionFeePaid {
 model ParticipantWinner {
   id               String        @id @default(ulid()) @db.VarChar
   tx_hash          String        @db.VarChar
-  // FK 1:1 strict to users.wallet_address (@unique) — one wallet may have at most ONE row globally.
-  // Remove @unique if you need N:1 (one wallet may win multiple competitions).
-  participant      String        @unique @db.VarChar
+  // FK 1:N to users.wallet_address — one wallet may win multiple competitions/categories.
+  participant      String        @db.VarChar
   title            String        @db.VarChar
   competition_id   String        @db.VarChar
   // Direct FK to prize_winner.winner_id (BigInt, global @unique); 1 prize_winner : N participant_winner
@@ -428,6 +427,7 @@ model ParticipantWinner {
   prize_winner     PrizeWinner?  @relation(fields: [prize_winner_id], references: [winner_id], onDelete: NoAction, onUpdate: NoAction)
   user             User          @relation(fields: [participant], references: [wallet_address], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([participant], map: "ix_participant_winner_participant")
   @@index([prize_winner_id], map: "ix_participant_winner_prize_winner_id")
   @@map("participant_winner")
 }
@@ -497,7 +497,7 @@ model CertificateParticipantWinnerMinted {
 
 model IndexerState {
   id                                     String                               @id @default(ulid()) @db.VarChar
-  contract_name                          String                               @db.VarChar
+  contract_address                       String                               @db.VarChar
   chain_id                               Int
   last_scanned_block                     Int
   created_at                             DateTime                             @default(now()) @db.Timestamptz(6)
@@ -516,19 +516,7 @@ model IndexerState {
   signature_certificate_winners          SignatureCertificateWinner[]
   signature_set_winners                  SignatureSetWinner[]
 
-  @@unique([contract_name, chain_id])
-  @@index([contract_name], map: "ix_indexer_state_contract_name")
+  @@unique([contract_address, chain_id])
+  @@index([contract_address], map: "ix_indexer_state_contract_address")
   @@map("indexer_state")
-}
-
-enum CompetitionPublicationStatus {
-  DRAFT
-  PUBLISHED
-}
-
-enum SkillLevel {
-  INTERMEDIATE
-  PROFICIENT
-  ADVANCED
-  EXPERT
 }

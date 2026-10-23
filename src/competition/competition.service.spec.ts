@@ -738,11 +738,15 @@ describe('CompetitionService', () => {
       expect(result.data.cid).toBeDefined();
       expect(result.data.uri).toMatch(/^ipfs:\/\//);
       expect(result.data.metadata).toMatchObject({
-        title_project: 'My Project',
-        submission_link: 'https://example.com',
-        document_cid: 'QmDoc123',
         title: 'Hackathon 2026',
+        project: expect.objectContaining({
+          title: 'My Project',
+          submission_link: 'https://example.com',
+          document_cid: 'QmDoc123',
+        }),
       });
+      expect(result.data.metadata.project.id).toBeUndefined();
+      expect(result.data.metadata.team.id).toBeUndefined();
     });
 
     it('should live re-sign and update signature when existing differs', async () => {

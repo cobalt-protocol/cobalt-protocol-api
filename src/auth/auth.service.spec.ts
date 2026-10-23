@@ -127,7 +127,6 @@ describe('AuthService', () => {
 
       expect(mockPrismaService.indexerState.findFirst).toHaveBeenCalledWith({
         where: {
-          contract_name: 'CompetitionManager',
           chain_id: 968,
         },
         select: { id: true },

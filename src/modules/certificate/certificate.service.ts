@@ -52,7 +52,7 @@ export class CertificateService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const where: any = { team_id: teamId, deleted_at: null };
+    const where: any = { team_id: teamId, user_id: userId, deleted_at: null };
 
     if (query.competitionId) {
       const compId = query.competitionId.trim();
@@ -97,7 +97,7 @@ export class CertificateService {
               pirze_certificate_claim: true,
             },
           },
-          indexer_state: { select: { id: true, chain_id: true, contract_name: true } },
+          indexer_state: { select: { id: true, chain_id: true, contract_address: true } },
         },
       }),
     ]);
@@ -116,20 +116,7 @@ export class CertificateService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const ownedTeams = await this.prisma.team.findMany({
-      where: { user_id: userId, deleted_at: null },
-      select: { id: true },
-    });
-    const memberRoles = await this.prisma.teamRole.findMany({
-      where: { user_id: userId, deleted_at: null },
-      select: { team_id: true },
-    });
-    const teamIdsSet = new Set<string>();
-    for (const t of ownedTeams) teamIdsSet.add(t.id);
-    for (const r of memberRoles) teamIdsSet.add(r.team_id);
-    const teamIds = Array.from(teamIdsSet);
-    if (teamIds.length === 0) throw new NotFoundException('No teams found for current user');
-    const where: any = { team_id: { in: teamIds }, deleted_at: null };
+    const where: any = { user_id: userId, deleted_at: null };
     if (query.competitionId) {
       const compId = query.competitionId.trim();
       if (compId) {
@@ -172,7 +159,7 @@ export class CertificateService {
               pirze_certificate_claim: true,
             },
           },
-          indexer_state: { select: { id: true, chain_id: true, contract_name: true } },
+          indexer_state: { select: { id: true, chain_id: true, contract_address: true } },
         },
       }),
     ]);

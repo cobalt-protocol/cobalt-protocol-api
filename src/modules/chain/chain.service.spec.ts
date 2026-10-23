@@ -33,6 +33,7 @@ describe('ChainService', () => {
     team: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
     },
     teamRole: {
       findMany: vi.fn(),

@@ -19,7 +19,6 @@ import { generateUlid } from '../common/utils/ulid.util.js';
 import { RequestNonceDto } from './dto/request-nonce.dto.js';
 import { VerifySignatureDto } from './dto/verify-signature.dto.js';
 
-const INDEXER_CONTRACT_NAME = 'CompetitionManager';
 
 export type UserRole = 'organization' | 'user';
 
@@ -92,7 +91,6 @@ export class AuthService {
     try {
       const state = await this.prisma.indexerState.findFirst({
         where: {
-          contract_name: INDEXER_CONTRACT_NAME,
           chain_id: chainId,
         },
         select: { id: true },
