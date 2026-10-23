@@ -248,6 +248,24 @@ export class ChainController {
     return this.chainService.getPrizeWinnersByChainIdAndCompetitionId(chainId, id);
   }
 
+  @Get(':chain_id/competitions/:id/prize-distributed')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get prize distributed by chain ID and competition ID',
+    description:
+      'GET api/v1/chains/:chain_id/competitions/:id/prize-distributed — returns rows from table `prize_distributed` where `competition_id` matches the competition (ULID `competition.id` or on-chain `competition.competition_id`) on the given chain. Returns 404 if the competition or its prize_distributed data is not found.',
+  })
+  @ApiParam({ name: 'chain_id', required: true, description: 'Chain ID', type: Number })
+  @ApiParam({ name: 'id', required: true, description: 'Competition ID (ULID or on-chain competition_id)', type: String })
+  @ApiResponse({ status: 200, description: 'Prize distributed retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Competition or prize distributed data not found' })
+  async getPrizeDistributedByChainIdAndCompetitionId(
+    @Param('chain_id', ParseIntPipe) chainId: number,
+    @Param('id') id: string,
+  ) {
+    return this.chainService.getPrizeDistributedByChainIdAndCompetitionId(chainId, id);
+  }
+
   @Get(':chain_id/competitions/:id/participant-winners')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

@@ -360,6 +360,43 @@ export class ChainService {
     };
   }
 
+  async getPrizeDistributedByChainIdAndCompetitionId(
+    chainId: number,
+    competitionId: string,
+  ) {
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [{ id: competitionId }, { competition_id: competitionId }],
+        deleted_at: null,
+        indexer_state: { chain_id: chainId },
+      },
+      select: { id: true },
+    });
+
+    if (!competition) {
+      throw new NotFoundException(
+        `Competition with ID ${competitionId} not found on chain ID ${chainId}`,
+      );
+    }
+
+    const prizeDistributed = await this.prisma.prizeDistributed.findMany({
+      where: { competition_id: competition.id, deleted_at: null },
+      orderBy: { created_at: 'asc' },
+    });
+
+    if (prizeDistributed.length === 0) {
+      throw new NotFoundException(
+        `Prize distributed data not found for competition ${competitionId} on chain ID ${chainId}`,
+      );
+    }
+
+    return {
+      data: prizeDistributed,
+      message: 'Prize distributed retrieved successfully',
+      errors: null,
+    };
+  }
+
   async getParticipantWinnersByChainIdAndCompetitionId(
     chainId: number,
     competitionId: string,
