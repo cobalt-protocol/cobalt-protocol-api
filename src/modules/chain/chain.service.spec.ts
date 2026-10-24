@@ -180,11 +180,43 @@ describe('ChainService', () => {
             ...mockCompetitions[0],
             total_teams: 1,
             total_participant: 3,
+            organization: null,
           },
         ],
         message: 'Competitions retrieved successfully',
         errors: null,
       });
+    });
+
+    it('should return competitions with organization if found', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        name: 'Web3 Foundation',
+        user_id: 'user-org-1',
+      };
+      const mockCompetitions = [
+        {
+          id: '01J8Z9X0000000000000000001',
+          name: 'Cobalt Hackathon 2026',
+          user_id: 'user-org-1',
+          indexer_state: {
+            chain_id: 11155111,
+          },
+          prize_winners: [],
+          prize_deposits: [],
+          teams: [],
+        },
+      ];
+
+      mockPrismaService.competition.findMany.mockResolvedValue(
+        mockCompetitions,
+      );
+      mockPrismaService.team.findMany.mockResolvedValue([]);
+      mockPrismaService.organization.findMany.mockResolvedValue([mockOrg]);
+
+      const result = await service.getCompetitionsByChainId(11155111);
+
+      expect(result.data[0].organization).toEqual(mockOrg);
     });
 
     it('should throw NotFoundException when no competitions are found', async () => {

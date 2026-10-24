@@ -110,15 +110,60 @@ export class ChainService {
       statsMap.set(team.competition_id, current);
     }
 
+    const userIds = [
+      ...new Set(
+        competitions
+          .map((c) => c.user_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const txHashes = [
+      ...new Set(
+        competitions
+          .map((c) => c.tx_hash)
+          .filter((tx): tx is string => Boolean(tx)),
+      ),
+    ];
+
+    const organizations =
+      userIds.length > 0 || txHashes.length > 0
+        ? await this.prisma.organization.findMany({
+            where: {
+              deleted_at: null,
+              OR: [
+                ...(userIds.length > 0 ? [{ user_id: { in: userIds } }] : []),
+                ...(txHashes.length > 0 ? [{ tx_hash: { in: txHashes } }] : []),
+              ],
+            },
+          })
+        : [];
+
+    const orgByUserId = new Map<string, any>();
+    const orgByTxHash = new Map<string, any>();
+    for (const org of organizations) {
+      if (org.user_id && !orgByUserId.has(org.user_id)) {
+        orgByUserId.set(org.user_id, org);
+      }
+      if (org.tx_hash && !orgByTxHash.has(org.tx_hash)) {
+        orgByTxHash.set(org.tx_hash, org);
+      }
+    }
+
     const formattedCompetitions = competitions.map((competition) => {
       const stats = statsMap.get(competition.id) ?? {
         total_teams: 0,
         total_participant: 0,
       };
+      const organization =
+        (competition.user_id ? orgByUserId.get(competition.user_id) : null) ??
+        (competition.tx_hash ? orgByTxHash.get(competition.tx_hash) : null) ??
+        null;
+
       return {
         ...competition,
         total_teams: stats.total_teams,
         total_participant: stats.total_participant,
+        organization,
       };
     });
 
