@@ -1939,5 +1939,100 @@ export class ChainService {
     return { data: { ...row, cid: metadataCidRaw, uri, metadata, certificate_cid: metadataCidRaw }, message: 'Signature certificate participant generated successfully', errors: null };
   }
 
+  async findMyWinnerMinted(
+    userId: string,
+    chainId: number,
+    competitionId: string,
+  ) {
+    if (!userId) {
+      throw new UnauthorizedException('User ID is required');
+    }
 
+    const competition = await this.prisma.competition.findFirst({
+      where: {
+        OR: [{ id: competitionId }, { competition_id: competitionId }],
+        deleted_at: null,
+        indexer_state: {
+          chain_id: chainId,
+        },
+      },
+    });
+
+    if (!competition) {
+      throw new NotFoundException('Competition not found on this chain');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deleted_at: null },
+    });
+
+    const records =
+      await this.prisma.certificateParticipantWinnerMinted.findMany({
+        where: {
+          competition_id: competition.id,
+          deleted_at: null,
+          OR: [
+            { user_id: userId },
+            ...(user?.wallet_address
+              ? [
+                  {
+                    user: {
+                      wallet_address: {
+                        equals: user.wallet_address,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+        include: {
+          competition: {
+            select: {
+              id: true,
+              competition_id: true,
+              name: true,
+              category: true,
+              certificate_cid: true,
+            },
+          },
+          team: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          indexer_state: {
+            select: {
+              id: true,
+              chain_id: true,
+              contract_address: true,
+            },
+          },
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+    const formatted = records.map((r: any) => ({
+      ...r,
+      token_id:
+        r.token_id !== undefined && r.token_id !== null
+          ? r.token_id.toString()
+          : null,
+      winner_id:
+        r.winner_id !== undefined && r.winner_id !== null
+          ? r.winner_id.toString()
+          : null,
+    }));
+
+    return {
+      data: formatted,
+      message:
+        'Certificate participant winner minted retrieved successfully',
+      errors: null,
+    };
+  }
 }

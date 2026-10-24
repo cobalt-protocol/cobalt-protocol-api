@@ -5,6 +5,8 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -13,6 +15,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  AuthSessionGuard,
+  type AuthenticatedRequest,
+} from '../auth/auth-session.guard.js';
 import { CompetitionService } from './competition.service.js';
 
 @ApiTags('Competitions')
@@ -513,6 +519,44 @@ export class CompetitionController {
   })
   async getParticipantWinners(@Param('id') id: string) {
     return this.competitionService.getParticipantWinnersByCompetitionId(id);
+  }
+
+  @Get(':id/certificate-participant-winner-minted')
+  @UseGuards(AuthSessionGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Get winner minted certificates for authenticated user by competition ID',
+    description:
+      'GET api/v1/competitions/:id/certificate-participant-winner-minted — returns rows from table `certificate_participant_winner_minted` filtered by user_id and competition_id (ULID or on-chain id).',
+  })
+  @ApiBearerAuth()
+  @ApiParam({
+    name: 'id',
+    description: 'Competition ID (ULID or on-chain competition_id)',
+    type: String,
+    example: '01J8Z9X0000000000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Winner minted certificates retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing session token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found',
+  })
+  async findMyWinnerMinted(
+    @Param('id') competitionId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.competitionService.findMyWinnerMinted(
+      req.userId,
+      competitionId,
+    );
   }
 
   @Get(':id')

@@ -833,5 +833,37 @@ export class ChainController {
     return this.chainService.generateSignatureCertificateParticipant(chainId, competitionId, teamId, req.userId);
   }
 
+  @Get(':chain_id/competitions/:competition_id/certificate-participant-winner-minted')
+  @UseGuards(AuthSessionGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Get winner minted certificates for authenticated user by chain and competition ID',
+    description:
+      'GET api/v1/chains/:chain_id/competitions/:competition_id/certificate-participant-winner-minted — returns rows from table `certificate_participant_winner_minted` filtered by user_id and competition_id on the specified chain.',
+  })
+  @ApiParam({ name: 'chain_id', required: true, type: Number })
+  @ApiParam({ name: 'competition_id', required: true, type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'Winner minted certificates retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 404,
+    description: 'Competition not found on this chain',
+  })
+  async getCertificateParticipantWinnerMinted(
+    @Param('chain_id', ParseIntPipe) chainId: number,
+    @Param('competition_id') competitionId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.chainService.findMyWinnerMinted(
+      req.userId,
+      chainId,
+      competitionId,
+    );
+  }
 }
 

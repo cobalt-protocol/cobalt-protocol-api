@@ -83,6 +83,9 @@ describe('CompetitionService', () => {
       create: vi.fn(),
       update: vi.fn(),
     },
+    certificateParticipantWinnerMinted: {
+      findMany: vi.fn(),
+    },
   };
 
   const mockJwtService = {
@@ -1158,6 +1161,60 @@ describe('CompetitionService', () => {
       await expect(
         service.findSignatureCertificateWinner('comp-1', '1', 'Bearer token'),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('findMyWinnerMinted', () => {
+    it('should return winner minted certificates for authenticated user', async () => {
+      const mockComp = {
+        id: 'comp-1',
+        competition_id: '1',
+      };
+      const mockUser = {
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      };
+      const mockRows = [
+        {
+          id: 'mint-1',
+          tx_hash: '0xabc',
+          token_id: 10n,
+          winner_id: 1n,
+          competition_id: 'comp-1',
+          user_id: 'user-1',
+          uri: 'ipfs://QmWinner',
+        },
+      ];
+
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.certificateParticipantWinnerMinted.findMany.mockResolvedValue(
+        mockRows,
+      );
+
+      const result = await service.findMyWinnerMinted('user-1', 'comp-1');
+
+      expect(result).toBeDefined();
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].token_id).toBe('10');
+      expect(result.data[0].winner_id).toBe('1');
+      expect(result.message).toBe(
+        'Certificate participant winner minted retrieved successfully',
+      );
+    });
+
+    it('should throw NotFoundException if competition is not found', async () => {
+      mockPrismaService.competition.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.findMyWinnerMinted('user-1', 'comp-unknown'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw UnauthorizedException if userId is empty', async () => {
+      await expect(
+        service.findMyWinnerMinted('', 'comp-1'),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 });

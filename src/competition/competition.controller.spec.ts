@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { AuthSessionGuard } from '../auth/auth-session.guard.js';
 import { CompetitionController } from './competition.controller.js';
 import { CompetitionService } from './competition.service.js';
 
@@ -42,6 +43,7 @@ describe('CompetitionController', () => {
     findPrizeWinners: vi.fn(),
     getTokenPrizeByCompetitionId: vi.fn(),
     findSignatureCertificateParticipant: vi.fn(),
+    findMyWinnerMinted: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -52,7 +54,10 @@ describe('CompetitionController', () => {
       providers: [
         { provide: CompetitionService, useValue: mockCompetitionService },
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthSessionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<CompetitionController>(CompetitionController);
   });
@@ -281,6 +286,34 @@ describe('CompetitionController', () => {
         mockCompetitionService.findSignatureCertificateParticipant,
       ).toHaveBeenCalledWith('comp-1', 'team-1', 'Bearer token');
       expect(result).toEqual(mockSigResponse);
+    });
+  });
+
+  describe('findMyWinnerMinted', () => {
+    it('should return winner minted certificates for authenticated user', async () => {
+      const mockResult = {
+        data: [
+          {
+            id: 'mint-1',
+            token_id: '1',
+            winner_id: '1',
+            competition_id: 'comp-1',
+          },
+        ],
+        message: 'Certificate participant winner minted retrieved successfully',
+        errors: null,
+      };
+
+      mockCompetitionService.findMyWinnerMinted.mockResolvedValue(mockResult);
+
+      const mockReq: any = { userId: 'user-1' };
+      const result = await controller.findMyWinnerMinted('comp-1', mockReq);
+
+      expect(mockCompetitionService.findMyWinnerMinted).toHaveBeenCalledWith(
+        'user-1',
+        'comp-1',
+      );
+      expect(result).toEqual(mockResult);
     });
   });
 });
