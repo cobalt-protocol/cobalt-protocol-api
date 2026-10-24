@@ -44,6 +44,10 @@ describe('ChainService', () => {
     teamCode: {
       findFirst: vi.fn(),
     },
+    organization: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+    },
     requestJoin: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),
@@ -246,10 +250,53 @@ describe('ChainService', () => {
       });
 
       expect(result).toEqual({
-        data: mockCompetition,
+        data: {
+          ...mockCompetition,
+          organization: null,
+        },
         message: 'Competition retrieved successfully',
         errors: null,
       });
+    });
+
+    it('should return competition with organization if found', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        name: 'Cobalt Org',
+        description: 'Test Org',
+        avatar_url: 'https://ipfs.io/org.png',
+        user_id: 'user-1',
+      };
+      const mockCompetitionWithUser = {
+        id: '01J8Z9X0000000000000000001',
+        competition_id: '1',
+        name: 'Cobalt Hackathon 2026',
+        user_id: 'user-1',
+        indexer_state: {
+          chain_id: 11155111,
+        },
+        prize_winners: [],
+        prize_deposits: [],
+      };
+
+      mockPrismaService.competition.findFirst.mockResolvedValue(
+        mockCompetitionWithUser,
+      );
+      mockPrismaService.organization.findFirst.mockResolvedValue(mockOrg);
+
+      const result = await service.getCompetitionByChainIdAndId(
+        11155111,
+        '01J8Z9X0000000000000000001',
+      );
+
+      expect(mockPrismaService.organization.findFirst).toHaveBeenCalledWith({
+        where: {
+          user_id: 'user-1',
+          deleted_at: null,
+        },
+      });
+
+      expect(result.data.organization).toEqual(mockOrg);
     });
 
     it('should throw NotFoundException when competition is not found', async () => {

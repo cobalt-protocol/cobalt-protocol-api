@@ -383,8 +383,30 @@ export class ChainService {
       );
     }
 
+    let organization: any = null;
+    if (competition.user_id) {
+      organization = await this.prisma.organization.findFirst({
+        where: {
+          user_id: competition.user_id,
+          deleted_at: null,
+        },
+      });
+    }
+
+    if (!organization && competition.tx_hash) {
+      organization = await this.prisma.organization.findFirst({
+        where: {
+          tx_hash: competition.tx_hash,
+          deleted_at: null,
+        },
+      });
+    }
+
     return {
-      data: competition,
+      data: {
+        ...competition,
+        organization,
+      },
       message: 'Competition retrieved successfully',
       errors: null,
     };

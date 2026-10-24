@@ -227,7 +227,7 @@ export class ChainController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Competition retrieved successfully',
+    description: 'Competition retrieved successfully with included organization data',
   })
   @ApiResponse({
     status: 404,
