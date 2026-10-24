@@ -534,6 +534,11 @@ export class ChainController {
     description: 'Request to join created — data = RequestJoin { id, user_id, team_id, status=pending }',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid Bearer token' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden — user profile incomplete (username, email, location, institution, skills, skill_description)',
+  })
   @ApiResponse({ status: 404, description: 'User not found atau Team not found on chain' })
   @ApiResponse({ status: 409, description: 'Already a member or already requested to join' })
   async requestJoinTeam(

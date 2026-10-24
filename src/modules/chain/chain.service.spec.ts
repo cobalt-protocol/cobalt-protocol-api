@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ChainService } from './chain.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 
@@ -13,6 +18,7 @@ describe('ChainService', () => {
     },
     user: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
     skillDescriptionUser: {
@@ -682,6 +688,86 @@ describe('ChainService', () => {
       expect(result.data.max_team_size).toBe(3);
       expect(result.data.member_count).toBe(3);
       expect(result.message).toBe('Joined team successfully');
+    });
+  });
+
+  describe('requestJoinTeam', () => {
+    it('should throw ForbiddenException if user has missing basic profile fields', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        username: '',
+        email: 'test@example.com',
+        location: 'Jakarta',
+        institution: 'ITB',
+        skills: [{ skill_name: 'Solidity', deleted_at: null }],
+        skill_description: { description: 'Web3 dev', deleted_at: null },
+      });
+
+      await expect(
+        service.requestJoinTeam('user-1', 968, 'team-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException if user has no skills', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        username: 'alice',
+        email: 'test@example.com',
+        location: 'Jakarta',
+        institution: 'ITB',
+        skills: [],
+        skill_description: { description: 'Web3 dev', deleted_at: null },
+      });
+
+      await expect(
+        service.requestJoinTeam('user-1', 968, 'team-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException if user has no skill description', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        username: 'alice',
+        email: 'test@example.com',
+        location: 'Jakarta',
+        institution: 'ITB',
+        skills: [{ skill_name: 'Solidity', deleted_at: null }],
+        skill_description: null,
+      });
+
+      await expect(
+        service.requestJoinTeam('user-1', 968, 'team-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should successfully create request_join when user profile and relations are complete', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        username: 'alice',
+        email: 'test@example.com',
+        location: 'Jakarta',
+        institution: 'ITB',
+        skills: [{ skill_name: 'Solidity', deleted_at: null }],
+        skill_description: { description: 'Web3 dev', deleted_at: null },
+      });
+      mockPrismaService.team.findFirst.mockResolvedValue({
+        id: 'team-1',
+        competition: { id: 'comp-1', indexer_state: { chain_id: 968 } },
+      });
+      mockPrismaService.teamRole.findFirst.mockResolvedValue(null);
+      mockPrismaService.requestJoin.findFirst.mockResolvedValue(null);
+      mockPrismaService.requestJoin.create.mockResolvedValue({
+        id: 'req-1',
+        user_id: 'user-1',
+        team_id: 'team-1',
+        status: 'pending',
+      });
+
+      const result = await service.requestJoinTeam('user-1', 968, 'team-1');
+
+      expect(result).toBeDefined();
+      expect(result.data.status).toBe('pending');
+      expect(result.message).toBe('Request to join team created successfully');
     });
   });
 });

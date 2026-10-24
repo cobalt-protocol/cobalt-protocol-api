@@ -230,6 +230,11 @@ export class TeamController {
     description: 'Unauthorized - invalid or missing session token',
   })
   @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden - user profile incomplete (username, email, location, institution, skills, skill_description)',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Team not found',
   })

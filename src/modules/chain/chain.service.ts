@@ -1107,11 +1107,49 @@ export class ChainService {
    * Effect: insert ke table `request_join` (@@map "request_join") dengan status='pending'
    */
   async requestJoinTeam(userId: string, chainId: number, teamId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deleted_at: null },
+      include: {
+        skills: {
+          where: { deleted_at: null },
+        },
+        skill_description: true,
+      },
     });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new ForbiddenException('User not found or profile incomplete');
+    }
+
+    const hasBasicProfile =
+      typeof user.username === 'string' &&
+      user.username.trim() !== '' &&
+      typeof user.email === 'string' &&
+      user.email.trim() !== '' &&
+      typeof user.location === 'string' &&
+      user.location.trim() !== '' &&
+      typeof user.institution === 'string' &&
+      user.institution.trim() !== '';
+
+    const hasSkills =
+      Array.isArray(user.skills) &&
+      user.skills.some(
+        (s: any) =>
+          s &&
+          s.deleted_at == null &&
+          typeof s.skill_name === 'string' &&
+          s.skill_name.trim() !== '',
+      );
+
+    const hasSkillDescription =
+      user.skill_description &&
+      user.skill_description.deleted_at == null &&
+      typeof user.skill_description.description === 'string' &&
+      user.skill_description.description.trim() !== '';
+
+    if (!hasBasicProfile || !hasSkills || !hasSkillDescription) {
+      throw new ForbiddenException(
+        'silahkan update profile: username, email, location, institution, skills, dan skill description harus diisi',
+      );
     }
 
     const team = await this.prisma.team.findFirst({
