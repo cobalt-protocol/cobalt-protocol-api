@@ -14,6 +14,7 @@ import { CertificateModule } from './modules/certificate/certificate.module.js';
 import { SignatureSetWinnerModule } from './modules/signature-set-winner/signature-set-winner.module.js';
 import { SignatureCreateCompetitionModule } from './modules/signature-create-competition/signature-create-competition.module.js';
 import { SignatureTeamPaymentModule } from './modules/signature-team-payment/signature-team-payment.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 
 @Module({
@@ -33,6 +34,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
     SignatureSetWinnerModule,
     SignatureCreateCompetitionModule,
     SignatureTeamPaymentModule,
+    DashboardModule,
   ],
   controllers: [],
   providers: [
