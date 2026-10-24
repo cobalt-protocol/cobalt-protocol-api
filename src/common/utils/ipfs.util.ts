@@ -200,3 +200,72 @@ export function buildParticipantCertificateMetadata(params: {
     team: teamData ?? null,
   };
 }
+
+/**
+ * Build the winner certificate JSON metadata as required:
+ * - Same structure as participant certificate metadata
+ * - Plus `title_winner` from prize_winner.category (queried by winner_id)
+ */
+export function buildWinnerCertificateMetadata(params: {
+  submission: {
+    id?: string;
+    title: string;
+    description?: string | null;
+    submission_link: string;
+    document_cid: string;
+    team_id?: string;
+    created_at?: any;
+    updated_at?: any;
+    deleted_at?: any;
+    [key: string]: any;
+  };
+  competition: {
+    name: string;
+    description: string;
+    certificate_cid?: string | null;
+    [key: string]: any;
+  };
+  team?: {
+    id?: string;
+    name?: string;
+    visibility?: boolean;
+    description?: string;
+    competition_id?: string;
+    user_id?: string;
+    tx_hash?: string | null;
+    created_at?: any;
+    updated_at?: any;
+    deleted_at?: any;
+    [key: string]: any;
+  } | null;
+  title_winner?: string | null;
+  prize_winner?: {
+    category?: string | null;
+    certificate_cid?: string | null;
+    [key: string]: any;
+  } | null;
+}): Record<string, unknown> {
+  const base = buildParticipantCertificateMetadata({
+    submission: params.submission,
+    competition: params.competition,
+    team: params.team,
+  });
+
+  const categoryTitle =
+    params.title_winner ??
+    params.prize_winner?.category ??
+    null;
+
+  const rawCertCid =
+    params.prize_winner?.certificate_cid?.trim() ||
+    params.competition.certificate_cid?.trim() ||
+    '';
+  const cleanCertCid = rawCertCid.replace(/^ipfs:\/\//, '').trim();
+  const image = cleanCertCid ? `ipfs://${cleanCertCid}` : (base.image as string);
+
+  return {
+    ...base,
+    image,
+    title_winner: categoryTitle,
+  };
+}

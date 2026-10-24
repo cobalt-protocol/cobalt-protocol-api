@@ -19,6 +19,7 @@ import {
 } from '../common/utils/certificate-signature.util.js';
 import {
   buildParticipantCertificateMetadata,
+  buildWinnerCertificateMetadata,
   pinJsonToIpfs,
 } from '../common/utils/ipfs.util.js';
 
@@ -1144,6 +1145,46 @@ export class CompetitionService {
     }
     if (onchainWinnerId === 0n)
       throw new BadRequestException('Invalid winnerId (0)');
+
+    const prizeWinnerRecord = await this.prisma.prizeWinner.findFirst({
+      where: {
+        competition_id: competition.id,
+        winner_id: onchainWinnerId,
+        deleted_at: null,
+      },
+    });
+    const titleWinner = prizeWinnerRecord?.category ?? null;
+
+    const submission = await this.prisma.submissionProject.findFirst({
+      where: { team_id: team.id, deleted_at: null },
+      orderBy: { created_at: 'desc' },
+    });
+    if (!submission) {
+      throw new BadRequestException(
+        'Team has not submitted any project yet (submission_project is empty) — cannot generate winner certificate signature',
+      );
+    }
+
+    const metadata = buildWinnerCertificateMetadata({
+      submission,
+      competition,
+      team,
+      title_winner: titleWinner,
+      prize_winner: prizeWinnerRecord,
+    });
+
+    let metadataCidRaw: string;
+    try {
+      metadataCidRaw = await pinJsonToIpfs(metadata);
+    } catch (e: any) {
+      this.logger.error(
+        `Failed to pin winner certificate metadata to IPFS: ${e?.message || e}`,
+      );
+      throw new BadRequestException(
+        e?.message || 'Failed to pin certificate metadata to IPFS',
+      );
+    }
+
     let contractChecksum: `0x${string}`;
     try {
       contractChecksum = resolveCompetitionContractAddress(competition as any);
@@ -1153,13 +1194,11 @@ export class CompetitionService {
       );
     }
     const participantChecksum = getAddress(user.wallet_address);
-    const cleanCid = (certificateCidRaw || '').replace(/^ipfs:\/\//, '');
-    const uri = cleanCid ? `ipfs://${cleanCid}` : '';
     const msgHash = hashWinnerCertificate(
       contractChecksum,
       participantChecksum,
       onchainWinnerId,
-      cleanCid,
+      metadataCidRaw,
     );
     let signature: `0x${string}`;
     try {
@@ -1197,13 +1236,15 @@ export class CompetitionService {
         data: { signature, team_id: team.id },
       });
     else winnerSig = existingWinnerSig;
+    const uri = metadataCidRaw ? `ipfs://${metadataCidRaw}` : '';
     return {
       data: {
         ...winnerSig,
         winner_id: onchainWinnerId.toString(),
-        cid: cleanCid,
-        certificate_cid: cleanCid,
+        cid: metadataCidRaw,
+        certificate_cid: metadataCidRaw,
         uri,
+        metadata,
       },
       message: 'Signature certificate winner retrieved successfully',
       errors: null,

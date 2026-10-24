@@ -989,4 +989,146 @@ describe('CompetitionService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
   });
+
+  describe('findSignatureCertificateWinner', () => {
+    it('should live re-sign and create winner signature with title_winner in metadata', async () => {
+      const mockUser = {
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      };
+      const mockComp = {
+        id: 'comp-1',
+        competition_id: '1',
+        name: 'Hackathon 2026',
+        description: 'Desc',
+        certificate_cid: 'Qm123',
+      };
+      const mockTeam = {
+        id: 'team-1',
+        competition_id: 'comp-1',
+        user_id: 'user-1',
+      };
+      const mockPrizeWinner = {
+        id: 'pw-1',
+        winner_id: 1n,
+        category: '1st Place',
+        certificate_cid: 'QmWinnerCert',
+        competition_id: 'comp-1',
+        winner: {
+          user_id: 'user-1',
+        },
+      };
+      const mockSubmission = {
+        id: 'sub-1',
+        title: 'Winning Project',
+        description: 'Best project',
+        submission_link: 'https://github.com/project',
+        document_cid: 'QmDoc123',
+        team_id: 'team-1',
+      };
+      const mockCreated = {
+        id: 'sig-win-1',
+        signature: '0x' + 'c'.repeat(130),
+        user_id: 'user-1',
+        competition_id: 'comp-1',
+        team_id: 'team-1',
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
+      mockPrismaService.prizeWinner.findFirst.mockResolvedValue(mockPrizeWinner);
+      mockPrismaService.submissionProject.findFirst.mockResolvedValue(mockSubmission);
+      mockPrismaService.signatureCertificateWinner.findFirst.mockResolvedValue(null);
+      mockPrismaService.signatureCertificateWinner.create.mockResolvedValue(mockCreated);
+
+      const result = await service.findSignatureCertificateWinner(
+        'comp-1',
+        '1',
+        'Bearer token',
+      );
+
+      expect(result).toBeDefined();
+      expect(result.data.winner_id).toBe('1');
+      expect(result.data.cid).toBeDefined();
+      expect(result.data.metadata).toMatchObject({
+        title: 'Hackathon 2026',
+        title_winner: '1st Place',
+        image: 'ipfs://QmWinnerCert',
+      });
+      expect(result.data.metadata.project).toMatchObject({
+        title: 'Winning Project',
+        submission_link: 'https://github.com/project',
+      });
+    });
+
+    it('should throw BadRequestException if team has no submission project', async () => {
+      const mockUser = {
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      };
+      const mockComp = {
+        id: 'comp-1',
+        competition_id: '1',
+        certificate_cid: 'Qm123',
+      };
+      const mockTeam = {
+        id: 'team-1',
+        competition_id: 'comp-1',
+        user_id: 'user-1',
+      };
+      const mockPrizeWinner = {
+        id: 'pw-1',
+        winner_id: 1n,
+        category: '1st Place',
+        competition_id: 'comp-1',
+        winner: { user_id: 'user-1' },
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
+      mockPrismaService.prizeWinner.findFirst.mockResolvedValue(mockPrizeWinner);
+      mockPrismaService.submissionProject.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.findSignatureCertificateWinner('comp-1', '1', 'Bearer token'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if user is not the winner for winner_id', async () => {
+      const mockUser = {
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      };
+      const mockComp = {
+        id: 'comp-1',
+        competition_id: '1',
+      };
+      const mockTeam = {
+        id: 'team-1',
+        competition_id: 'comp-1',
+        user_id: 'user-1',
+      };
+      const mockPrizeWinner = {
+        id: 'pw-1',
+        winner_id: 1n,
+        category: '1st Place',
+        competition_id: 'comp-1',
+        winner: { user_id: 'other-user' },
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
+      mockPrismaService.prizeWinner.findFirst.mockResolvedValue(mockPrizeWinner);
+
+      await expect(
+        service.findSignatureCertificateWinner('comp-1', '1', 'Bearer token'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });
