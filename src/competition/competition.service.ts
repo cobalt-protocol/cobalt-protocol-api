@@ -1153,12 +1153,13 @@ export class CompetitionService {
       );
     }
     const participantChecksum = getAddress(user.wallet_address);
-    const uri = certificateCidRaw ? `ipfs://${certificateCidRaw}` : '';
+    const cleanCid = (certificateCidRaw || '').replace(/^ipfs:\/\//, '');
+    const uri = cleanCid ? `ipfs://${cleanCid}` : '';
     const msgHash = hashWinnerCertificate(
       contractChecksum,
       participantChecksum,
       onchainWinnerId,
-      uri,
+      cleanCid,
     );
     let signature: `0x${string}`;
     try {
@@ -1197,7 +1198,13 @@ export class CompetitionService {
       });
     else winnerSig = existingWinnerSig;
     return {
-      data: { ...winnerSig, winner_id: onchainWinnerId.toString(), uri },
+      data: {
+        ...winnerSig,
+        winner_id: onchainWinnerId.toString(),
+        cid: cleanCid,
+        certificate_cid: cleanCid,
+        uri,
+      },
       message: 'Signature certificate winner retrieved successfully',
       errors: null,
     };

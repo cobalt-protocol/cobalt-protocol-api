@@ -99,19 +99,19 @@ export function hashParticipantCertificate(
 
 /**
  * Must match CompetitionManager.safeMintCertificateParticipantWinner:
- * keccak256(abi.encodePacked(address(this), msg.sender, _winnerId, uri))
- * uri = "ipfs://" + winner.certificateCID  (via IPFSHelper.toIPFSURI)
+ * keccak256(abi.encodePacked(address(this), msg.sender, _winnerId, _cid))
+ * _cid is raw CID (without ipfs://). Contract computes uri = IPFSHelper.toIPFSURI(_cid) internally.
  */
 export function hashWinnerCertificate(
   contractAddress: `0x${string}`,
   participantAddress: `0x${string}`,
   winnerId: bigint,
-  uri: string,
+  certificateCidRaw: string,
 ): `0x${string}` {
   return keccak256(
     encodePacked(
       ['address', 'address', 'uint256', 'string'],
-      [contractAddress, participantAddress, winnerId, uri],
+      [contractAddress, participantAddress, winnerId, certificateCidRaw],
     ),
   );
 }
