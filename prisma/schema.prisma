@@ -169,7 +169,7 @@ model Team {
   deleted_at                             DateTime?                            @db.Timestamptz(6)
   certificate_participant_minteds        CertificateParticipantMinted[]
   certificate_participant_winner_minteds CertificateParticipantWinnerMinted[]
-  participant_winner                     ParticipantWinner?
+  participant_winners                    ParticipantWinner[]
   request_joins                          RequestJoin[]
   requirements_team                      RequirementsTeam?
   signature_certificate_participants     SignatureCertificateParticipant[]
@@ -453,7 +453,7 @@ model ParticipantWinner {
   participant      String        @db.VarChar
   title            String        @db.VarChar
   competition_id   String        @db.VarChar
-  team_id          String?       @unique @db.VarChar
+  team_id          String?       @db.VarChar
   // Direct FK to prize_winner.winner_id (BigInt, unique per competition); 1 prize_winner : N participant_winner
   prize_winner_id  BigInt?       @db.BigInt
   indexer_state_id String?       @db.VarChar
@@ -468,6 +468,7 @@ model ParticipantWinner {
 
   @@index([participant], map: "ix_participant_winner_participant")
   @@index([prize_winner_id], map: "ix_participant_winner_prize_winner_id")
+  @@index([team_id], map: "ix_participant_winner_team_id")
   @@map("participant_winner")
 }
 
