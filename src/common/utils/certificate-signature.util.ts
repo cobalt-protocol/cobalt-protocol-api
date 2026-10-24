@@ -1,4 +1,5 @@
 import {
+  encodeAbiParameters,
   encodePacked,
   getAddress,
   isAddress,
@@ -32,6 +33,28 @@ export function getCompetitionContractAddress(): `0x${string}` {
     throw new Error(`Invalid COMPETITION_CONTRACT address: ${raw}`);
   }
   return getAddress(raw);
+}
+
+/**
+ * Resolve the CompetitionManager address that a competition belongs to.
+ * The signed hash includes address(this), so it MUST be the contract that
+ * actually holds the competition (indexer_state.contract_address), not a
+ * global env value — otherwise redeployed contracts yield InvalidSignature.
+ * Falls back to COMPETITION_CONTRACT only if the competition has no indexer_state.
+ */
+export function resolveCompetitionContractAddress(competition?: {
+  indexer_state?: { contract_address?: string | null } | null;
+}): `0x${string}` {
+  const fromState = competition?.indexer_state?.contract_address;
+  if (fromState) {
+    if (!isAddress(fromState)) {
+      throw new Error(
+        `Invalid indexer_state.contract_address: ${fromState}`,
+      );
+    }
+    return getAddress(fromState);
+  }
+  return getCompetitionContractAddress();
 }
 
 export function getSignerAccount() {
@@ -116,6 +139,107 @@ export function hashSetWinner(
         onchainCompetitionId,
         teamId,
       ],
+    ),
+  );
+}
+
+export interface CreateCompetitionPaymentStruct {
+  tokenAddress: `0x${string}`;
+  fee: bigint;
+}
+
+export interface CreateCompetitionStruct {
+  id: bigint;
+  cid: string;
+  formation: string;
+  organization: `0x${string}`;
+  prizeCertificateClaim: bigint;
+  certificateCID: string;
+  payment: CreateCompetitionPaymentStruct;
+}
+
+export interface CreateCompetitionWinnerStruct {
+  id: bigint;
+  competitionId: bigint;
+  prizeToken: `0x${string}`;
+  prizeAmount: bigint;
+  certificateCID: string;
+}
+
+/**
+ * Must match CompetitionCreationModule.createCompetition / CompetitionHelper.verifySig:
+ * keccak256(abi.encode(address(this), _competition, _payment, _winners, _priceCompetitionFeeId))
+ */
+export function hashCreateCompetition(
+  contractAddress: `0x${string}`,
+  competition: CreateCompetitionStruct,
+  payment: CreateCompetitionPaymentStruct,
+  winners: CreateCompetitionWinnerStruct[],
+  priceCompetitionFeeId: bigint,
+): `0x${string}` {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { name: 'contractAddress', type: 'address' },
+        {
+          name: 'competition',
+          type: 'tuple',
+          components: [
+            { name: 'id', type: 'uint256' },
+            { name: 'cid', type: 'string' },
+            { name: 'formation', type: 'string' },
+            { name: 'organization', type: 'address' },
+            { name: 'prizeCertificateClaim', type: 'uint256' },
+            { name: 'certificateCID', type: 'string' },
+            {
+              name: 'payment',
+              type: 'tuple',
+              components: [
+                { name: 'tokenAddress', type: 'address' },
+                { name: 'fee', type: 'uint256' },
+              ],
+            },
+          ],
+        },
+        {
+          name: 'payment',
+          type: 'tuple',
+          components: [
+            { name: 'tokenAddress', type: 'address' },
+            { name: 'fee', type: 'uint256' },
+          ],
+        },
+        {
+          name: 'winners',
+          type: 'tuple[]',
+          components: [
+            { name: 'id', type: 'uint256' },
+            { name: 'competitionId', type: 'uint256' },
+            { name: 'prizeToken', type: 'address' },
+            { name: 'prizeAmount', type: 'uint256' },
+            { name: 'certificateCID', type: 'string' },
+          ],
+        },
+        { name: 'priceCompetitionFeeId', type: 'uint256' },
+      ],
+      [contractAddress, competition, payment, winners, priceCompetitionFeeId],
+    ),
+  );
+}
+
+/**
+ * Must match TeamPaymentModule.paymentCreateTeam / CompetitionHelper.verifySig:
+ * keccak256(abi.encodePacked(address(this), _competitionId, cid))
+ */
+export function hashTeamPayment(
+  contractAddress: `0x${string}`,
+  onchainCompetitionId: bigint,
+  cid: string,
+): `0x${string}` {
+  return keccak256(
+    encodePacked(
+      ['address', 'uint256', 'string'],
+      [contractAddress, onchainCompetitionId, cid],
     ),
   );
 }

@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import {
   deriveNumericTeamId,
   getCompetitionContractAddress,
+  resolveCompetitionContractAddress,
   hashSetWinner,
   signHashWithSigner,
 } from '../../common/utils/certificate-signature.util.js';
@@ -95,7 +96,7 @@ export class SignatureSetWinnerService {
 
     let contractChecksum: `0x${string}`;
     try {
-      contractChecksum = getCompetitionContractAddress();
+      contractChecksum = resolveCompetitionContractAddress(competition);
     } catch (e: any) {
       throw new BadRequestException(e?.message || 'Invalid COMPETITION_CONTRACT');
     }

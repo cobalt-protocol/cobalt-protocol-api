@@ -28,6 +28,7 @@ model User {
   signature_certificate_participants     SignatureCertificateParticipant[]
   signature_certificate_winners          SignatureCertificateWinner[]
   signature_set_winners                  SignatureSetWinner[]
+  signature_team_payments                SignatureTeamPayment[]
   skill_description                      SkillDescriptionUser?
   skills                                 SkillUser[]
   social_media                           SocialMediaUser?
@@ -129,6 +130,8 @@ model Competition {
   signature_certificate_participants    SignatureCertificateParticipant[]
   signature_certificate_winners         SignatureCertificateWinner[]
   signature_set_winners                 SignatureSetWinner[]
+  signature_create_competitions         SignatureCreateCompetition[]
+  signature_team_payments               SignatureTeamPayment[]
   teams                                 Team[]
 
   @@map("competition")
@@ -136,7 +139,7 @@ model Competition {
 
 model PrizeWinner {
   id                  String              @id @default(ulid()) @db.VarChar
-  winner_id           BigInt              @unique
+  winner_id           BigInt
   category            String              @db.VarChar
   amount              Decimal             @db.Decimal(78, 0)
   certificate_cid     String              @db.VarChar
@@ -148,6 +151,8 @@ model PrizeWinner {
   winner              Winner?
   participant_winners ParticipantWinner[]
 
+  @@unique([competition_id, winner_id], map: "uq_prize_winner_competition_winner")
+  @@index([winner_id], map: "ix_prize_winner_winner_id")
   @@map("prize_winner")
 }
 
@@ -164,6 +169,7 @@ model Team {
   deleted_at                             DateTime?                            @db.Timestamptz(6)
   certificate_participant_minteds        CertificateParticipantMinted[]
   certificate_participant_winner_minteds CertificateParticipantWinnerMinted[]
+  participant_winner                     ParticipantWinner?
   request_joins                          RequestJoin[]
   requirements_team                      RequirementsTeam?
   signature_certificate_participants     SignatureCertificateParticipant[]
@@ -341,6 +347,36 @@ model SignatureSetWinner {
   @@map("signature_set_winner")
 }
 
+model SignatureCreateCompetition {
+  id               String        @id @default(ulid()) @db.VarChar
+  signature        String        @db.VarChar
+  competition_id   String?       @db.VarChar
+  indexer_state_id String?       @db.VarChar
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?     @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at       DateTime?     @db.Timestamptz(6)
+  competition      Competition?  @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  indexer_state    IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("signature_create_competition")
+}
+
+model SignatureTeamPayment {
+  id               String        @id @default(ulid()) @db.VarChar
+  signature        String        @db.VarChar
+  user_id          String?       @db.VarChar
+  competition_id   String?       @db.VarChar
+  indexer_state_id String?       @db.VarChar
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?     @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at       DateTime?     @db.Timestamptz(6)
+  user             User?         @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  competition      Competition?  @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  indexer_state    IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("signature_team_payment")
+}
+
 model ListingToken {
   id               String        @id @default(ulid()) @db.VarChar
   tx_hash          String        @db.VarChar
@@ -377,7 +413,7 @@ model PrizeDeposited {
 model PriceCompetition {
   id                       String        @id @default(ulid()) @db.VarChar
   tx_hash                  String        @db.VarChar
-  price_competition_fee_id BigInt        @unique
+  price_competition_fee_id BigInt
   treasury_fee             Decimal       @db.Decimal(78, 0)
   token_address            String        @db.VarChar
   title                    String        @db.VarChar
@@ -389,6 +425,7 @@ model PriceCompetition {
   competitions             Competition[]
   indexer_state            IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@unique([price_competition_fee_id, indexer_state_id], map: "uq_price_competition_fee_id_indexer_state")
   @@map("price_competition")
 }
 
@@ -416,15 +453,17 @@ model ParticipantWinner {
   participant      String        @db.VarChar
   title            String        @db.VarChar
   competition_id   String        @db.VarChar
-  // Direct FK to prize_winner.winner_id (BigInt, global @unique); 1 prize_winner : N participant_winner
+  team_id          String?       @unique @db.VarChar
+  // Direct FK to prize_winner.winner_id (BigInt, unique per competition); 1 prize_winner : N participant_winner
   prize_winner_id  BigInt?       @db.BigInt
   indexer_state_id String?       @db.VarChar
   created_at       DateTime      @default(now()) @db.Timestamptz(6)
   updated_at       DateTime?     @default(now()) @updatedAt @db.Timestamptz(6)
   deleted_at       DateTime?     @db.Timestamptz(6)
   competition      Competition   @relation(fields: [competition_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  team             Team?         @relation(fields: [team_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   indexer_state    IndexerState? @relation(fields: [indexer_state_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  prize_winner     PrizeWinner?  @relation(fields: [prize_winner_id], references: [winner_id], onDelete: NoAction, onUpdate: NoAction)
+  prize_winner     PrizeWinner?  @relation(fields: [competition_id, prize_winner_id], references: [competition_id, winner_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_participant_winner_prize_winner")
   user             User          @relation(fields: [participant], references: [wallet_address], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([participant], map: "ix_participant_winner_participant")
@@ -515,6 +554,8 @@ model IndexerState {
   signature_certificate_participants     SignatureCertificateParticipant[]
   signature_certificate_winners          SignatureCertificateWinner[]
   signature_set_winners                  SignatureSetWinner[]
+  signature_create_competitions          SignatureCreateCompetition[]
+  signature_team_payments                SignatureTeamPayment[]
 
   @@unique([contract_address, chain_id])
   @@index([contract_address], map: "ix_indexer_state_contract_address")

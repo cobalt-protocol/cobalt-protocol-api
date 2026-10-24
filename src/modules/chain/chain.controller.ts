@@ -94,6 +94,70 @@ export class ChainController {
     );
   }
 
+  @Get(':chain_id/competitions/listing-token-prize')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get all listing token prizes by chain ID',
+    description:
+      'Retrieve all active listing tokens from the listing_token table filtered by chain_id via indexer_state.',
+  })
+  @ApiParam({
+    name: 'chain_id',
+    required: true,
+    description: 'Chain ID (matched via listing_token.indexer_state.chain_id)',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listing tokens retrieved successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No listing tokens found for the specified chain',
+  })
+  async getListingTokenPrizesByChainId(
+    @Param('chain_id', ParseIntPipe) chainId: number,
+  ) {
+    return this.chainService.getListingTokenPrizesByChainId(chainId);
+  }
+
+  @Get(':chain_id/price-competitions/:price_competition_fee_id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get price competition by chain ID and price competition fee ID',
+    description:
+      'Retrieve a price competition from the price_competition table filtered by chain_id (via indexer_state) and price_competition_fee_id.',
+  })
+  @ApiParam({
+    name: 'chain_id',
+    required: true,
+    description: 'Chain ID (matched via price_competition.indexer_state.chain_id)',
+    type: Number,
+  })
+  @ApiParam({
+    name: 'price_competition_fee_id',
+    required: true,
+    description: 'Price competition fee ID (or ULID)',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Price competition retrieved successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Price competition not found for the specified chain and fee ID',
+  })
+  async getPriceCompetitionByChainIdAndFeeId(
+    @Param('chain_id', ParseIntPipe) chainId: number,
+    @Param('price_competition_fee_id') priceCompetitionFeeId: string,
+  ) {
+    return this.chainService.getPriceCompetitionByChainIdAndFeeId(
+      chainId,
+      priceCompetitionFeeId,
+    );
+  }
+
   @Get(':chain_id/competitions/:competition_id/teams/organization')
   @UseGuards(AuthSessionGuard)
   @HttpCode(HttpStatus.OK)

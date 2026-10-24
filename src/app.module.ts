@@ -12,6 +12,8 @@ import { ChainModule } from './modules/chain/chain.module.js';
 import { TeamModule } from './modules/team/team.module.js';
 import { CertificateModule } from './modules/certificate/certificate.module.js';
 import { SignatureSetWinnerModule } from './modules/signature-set-winner/signature-set-winner.module.js';
+import { SignatureCreateCompetitionModule } from './modules/signature-create-competition/signature-create-competition.module.js';
+import { SignatureTeamPaymentModule } from './modules/signature-team-payment/signature-team-payment.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 
 @Module({
@@ -29,6 +31,8 @@ import { PrismaModule } from './prisma/prisma.module.js';
     TeamModule,
     CertificateModule,
     SignatureSetWinnerModule,
+    SignatureCreateCompetitionModule,
+    SignatureTeamPaymentModule,
   ],
   controllers: [],
   providers: [

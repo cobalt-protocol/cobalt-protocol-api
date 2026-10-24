@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import {
   deriveNumericTeamId,
   getCompetitionContractAddress,
+  resolveCompetitionContractAddress,
   hashParticipantCertificate,
   hashWinnerCertificate,
   signHashWithSigner,
@@ -958,7 +959,7 @@ export class CompetitionService {
 
     let contractChecksum: `0x${string}`;
     try {
-      contractChecksum = getCompetitionContractAddress();
+      contractChecksum = resolveCompetitionContractAddress(competition as any);
     } catch (e: any) {
       throw new BadRequestException(
         e?.message || 'Invalid COMPETITION_CONTRACT',
@@ -1069,6 +1070,7 @@ export class CompetitionService {
     if (!user) throw new UnauthorizedException('User not found');
     const competition = await this.prisma.competition.findFirst({
       where: { OR: [{ id }, { competition_id: id }], deleted_at: null },
+      include: { indexer_state: true },
     });
     if (!competition) throw new NotFoundException('Competition not found');
     if (!user.wallet_address || !isAddress(user.wallet_address))
@@ -1144,7 +1146,7 @@ export class CompetitionService {
       throw new BadRequestException('Invalid winnerId (0)');
     let contractChecksum: `0x${string}`;
     try {
-      contractChecksum = getCompetitionContractAddress();
+      contractChecksum = resolveCompetitionContractAddress(competition as any);
     } catch (e: any) {
       throw new BadRequestException(
         e?.message || 'Invalid COMPETITION_CONTRACT',

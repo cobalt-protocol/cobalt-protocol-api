@@ -8,10 +8,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { getAddress, isAddress } from 'viem';
+import { ulid } from 'ulid';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import {
   deriveNumericTeamId,
   getCompetitionContractAddress,
+  resolveCompetitionContractAddress,
   hashParticipantCertificate,
   signHashWithSigner,
 } from '../../common/utils/certificate-signature.util.js';
@@ -19,6 +21,7 @@ import {
   buildParticipantCertificateMetadata,
   pinJsonToIpfs,
 } from '../../common/utils/ipfs.util.js';
+import { UpdateOrganizationProfileDto } from './dto/update-organization-profile.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UpdateChainTeamDto } from './dto/update-chain-team.dto.js';
 import { CreateSubmissionDto } from './dto/create-submission.dto.js';
@@ -173,6 +176,90 @@ export class ChainService {
     return {
       data: competitions,
       message: 'Organization competitions retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async getListingTokenPrizesByChainId(chainId: number) {
+    const listingTokens = await this.prisma.listingToken.findMany({
+      where: {
+        deleted_at: null,
+        indexer_state: {
+          chain_id: chainId,
+        },
+      },
+      include: {
+        indexer_state: true,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (!listingTokens || listingTokens.length === 0) {
+      throw new NotFoundException(
+        `No listing tokens found for chain ID ${chainId}`,
+      );
+    }
+
+    return {
+      data: listingTokens,
+      message: 'Listing tokens retrieved successfully',
+      errors: null,
+    };
+  }
+
+  async getPriceCompetitionByChainIdAndFeeId(
+    chainId: number,
+    priceCompetitionFeeId: string,
+  ) {
+    let whereCondition: any = {
+      id: priceCompetitionFeeId,
+      deleted_at: null,
+      indexer_state: {
+        chain_id: chainId,
+      },
+    };
+
+    if (/^\d+$/.test(priceCompetitionFeeId)) {
+      try {
+        const feeId = BigInt(priceCompetitionFeeId);
+        whereCondition = {
+          OR: [
+            { price_competition_fee_id: feeId },
+            { id: priceCompetitionFeeId },
+          ],
+          deleted_at: null,
+          indexer_state: {
+            chain_id: chainId,
+          },
+        };
+      } catch {
+        // Fallback to id filter if BigInt conversion fails
+      }
+    }
+
+    const priceCompetition = await this.prisma.priceCompetition.findFirst({
+      where: whereCondition,
+      include: {
+        indexer_state: true,
+        competitions: {
+          where: {
+            deleted_at: null,
+          },
+        },
+      },
+    });
+
+    if (!priceCompetition) {
+      throw new NotFoundException(
+        `Price competition with fee ID ${priceCompetitionFeeId} not found on chain ID ${chainId}`,
+      );
+    }
+
+    return {
+      data: priceCompetition,
+      message: 'Price competition retrieved successfully',
       errors: null,
     };
   }
@@ -1514,6 +1601,38 @@ export class ChainService {
         });
       }
 
+      // update organization profile if user has an organization or organization fields are provided
+      const orgName = dto.name ?? dto.organization_name;
+      const orgDescription = dto.description;
+      const orgAvatarUrl = dto.avatar_url;
+
+      if (
+        orgName !== undefined ||
+        orgDescription !== undefined ||
+        orgAvatarUrl !== undefined
+      ) {
+        const existingOrg = await tx.organization.findFirst({
+          where: { user_id: userId, deleted_at: null },
+          orderBy: { created_at: 'desc' },
+        });
+
+        if (existingOrg) {
+          const orgUpdateData: any = {};
+          if (orgName !== undefined) orgUpdateData.name = orgName;
+          if (orgDescription !== undefined)
+            orgUpdateData.description = orgDescription;
+          if (orgAvatarUrl !== undefined)
+            orgUpdateData.avatar_url = orgAvatarUrl;
+
+          if (Object.keys(orgUpdateData).length > 0) {
+            await tx.organization.update({
+              where: { id: existingOrg.id },
+              data: orgUpdateData,
+            });
+          }
+        }
+      }
+
       // update skill description (pitch)
       const pitch = dto.pitch ?? dto.description;
       if (pitch !== undefined) {
@@ -1615,6 +1734,87 @@ export class ChainService {
       errors: null,
     };
   }
+
+  async updateOrganizationProfile(
+    userId: string,
+    _chainId: number,
+    dto: UpdateOrganizationProfileDto,
+  ) {
+    if (!userId) {
+      throw new UnauthorizedException('A valid session is required');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const name = typeof dto.name === 'string' ? dto.name.trim() : '';
+    const description =
+      typeof dto.description === 'string' ? dto.description.trim() : '';
+
+    if (!name) {
+      throw new BadRequestException('name is required');
+    }
+    if (!description) {
+      throw new BadRequestException('description is required');
+    }
+
+    const avatarUrl: string | null | undefined =
+      dto.avatar_url !== undefined
+        ? dto.avatar_url.trim() || null
+        : undefined;
+
+    const existingOrg = await this.prisma.organization.findFirst({
+      where: {
+        user_id: userId,
+        deleted_at: null,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    let organization;
+    if (!existingOrg) {
+      organization = await this.prisma.organization.create({
+        data: {
+          id: ulid(),
+          tx_hash: `org_${ulid()}`,
+          user_id: userId,
+          name,
+          description,
+          avatar_url: avatarUrl ?? null,
+        },
+      });
+    } else {
+      const updateData: any = {
+        name,
+        description,
+      };
+      if (avatarUrl !== undefined) {
+        updateData.avatar_url = avatarUrl;
+      }
+
+      organization = await this.prisma.organization.update({
+        where: { id: existingOrg.id },
+        data: updateData,
+      });
+    }
+
+    return {
+      data: {
+        organization,
+      },
+      message: existingOrg
+        ? 'Organization profile updated successfully'
+        : 'Organization profile created successfully',
+      errors: null,
+    };
+  }
   /**
    * Generate & persist participant certificate signature (chain-scoped).
    * POST api/v1/chains/:chain_id/competitions/:competition_id/signature-certificate-participant/:team_id
@@ -1693,7 +1893,7 @@ export class ChainService {
       );
     }
     let contractChecksum: `0x${string}`;
-    try { contractChecksum = getCompetitionContractAddress(); } catch (e: any) {
+    try { contractChecksum = resolveCompetitionContractAddress(competition); } catch (e: any) {
       throw new BadRequestException(e?.message || 'Invalid COMPETITION_CONTRACT');
     }
     const participantChecksum = getAddress(user.wallet_address);

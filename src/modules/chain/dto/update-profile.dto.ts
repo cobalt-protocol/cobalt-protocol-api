@@ -27,6 +27,21 @@ export class SocialMediaDto {
 }
 
 export class UpdateProfileDto {
+  @ApiPropertyOptional({ example: 'Google Developer Student Clubs' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ example: 'Google Developer Student Clubs' })
+  @IsOptional()
+  @IsString()
+  organization_name?: string;
+
+  @ApiPropertyOptional({ example: 'https://ipfs.io/ipfs/Qm...' })
+  @IsOptional()
+  @IsString()
+  avatar_url?: string;
+
   @ApiPropertyOptional({ example: 'johndoe' })
   @IsOptional()
   @IsString()
