@@ -64,6 +64,11 @@ describe('CompetitionService', () => {
     },
     teamRole: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
+    },
+    participantWinner: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     submissionProject: {
       findFirst: vi.fn(),
@@ -1014,9 +1019,14 @@ describe('CompetitionService', () => {
         category: '1st Place',
         certificate_cid: 'QmWinnerCert',
         competition_id: 'comp-1',
-        winner: {
-          user_id: 'user-1',
-        },
+      };
+      const mockParticipantWinner = {
+        id: 'pw-part-1',
+        team_id: 'team-1',
+        competition_id: 'comp-1',
+        prize_winner_id: 1n,
+        prize_winner: mockPrizeWinner,
+        team: mockTeam,
       };
       const mockSubmission = {
         id: 'sub-1',
@@ -1037,6 +1047,8 @@ describe('CompetitionService', () => {
       mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
       mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
       mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.teamRole.findMany.mockResolvedValue([{ team_id: 'team-1' }]);
+      mockPrismaService.participantWinner.findMany.mockResolvedValue([mockParticipantWinner]);
       mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
       mockPrismaService.prizeWinner.findFirst.mockResolvedValue(mockPrizeWinner);
       mockPrismaService.submissionProject.findFirst.mockResolvedValue(mockSubmission);
@@ -1063,6 +1075,47 @@ describe('CompetitionService', () => {
       });
     });
 
+    it('should throw ForbiddenException if user has no team in team_role', async () => {
+      const mockUser = {
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      };
+      const mockComp = {
+        id: 'comp-1',
+        competition_id: '1',
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.teamRole.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.findSignatureCertificateWinner('comp-1', '1', 'Bearer token'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException if participant_winner query returns empty', async () => {
+      const mockUser = {
+        id: 'user-1',
+        wallet_address: '0x1234567890123456789012345678901234567890',
+      };
+      const mockComp = {
+        id: 'comp-1',
+        competition_id: '1',
+      };
+
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
+      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
+      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.teamRole.findMany.mockResolvedValue([{ team_id: 'team-1' }]);
+      mockPrismaService.participantWinner.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.findSignatureCertificateWinner('comp-1', '1', 'Bearer token'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
     it('should throw BadRequestException if team has no submission project', async () => {
       const mockUser = {
         id: 'user-1',
@@ -1083,48 +1136,24 @@ describe('CompetitionService', () => {
         winner_id: 1n,
         category: '1st Place',
         competition_id: 'comp-1',
-        winner: { user_id: 'user-1' },
+      };
+      const mockParticipantWinner = {
+        id: 'pw-part-1',
+        team_id: 'team-1',
+        competition_id: 'comp-1',
+        prize_winner_id: 1n,
+        prize_winner: mockPrizeWinner,
+        team: mockTeam,
       };
 
       mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
       mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
       mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
+      mockPrismaService.teamRole.findMany.mockResolvedValue([{ team_id: 'team-1' }]);
+      mockPrismaService.participantWinner.findMany.mockResolvedValue([mockParticipantWinner]);
       mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
       mockPrismaService.prizeWinner.findFirst.mockResolvedValue(mockPrizeWinner);
       mockPrismaService.submissionProject.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.findSignatureCertificateWinner('comp-1', '1', 'Bearer token'),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should throw BadRequestException if user is not the winner for winner_id', async () => {
-      const mockUser = {
-        id: 'user-1',
-        wallet_address: '0x1234567890123456789012345678901234567890',
-      };
-      const mockComp = {
-        id: 'comp-1',
-        competition_id: '1',
-      };
-      const mockTeam = {
-        id: 'team-1',
-        competition_id: 'comp-1',
-        user_id: 'user-1',
-      };
-      const mockPrizeWinner = {
-        id: 'pw-1',
-        winner_id: 1n,
-        category: '1st Place',
-        competition_id: 'comp-1',
-        winner: { user_id: 'other-user' },
-      };
-
-      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-1' });
-      mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
-      mockPrismaService.competition.findFirst.mockResolvedValue(mockComp);
-      mockPrismaService.team.findFirst.mockResolvedValue(mockTeam);
-      mockPrismaService.prizeWinner.findFirst.mockResolvedValue(mockPrizeWinner);
 
       await expect(
         service.findSignatureCertificateWinner('comp-1', '1', 'Bearer token'),

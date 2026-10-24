@@ -402,6 +402,11 @@ export class CompetitionController {
     description: 'Unauthorized - missing or invalid Bearer token',
   })
   @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden - user has no team or team is not recorded as a participant winner for this competition',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Competition, team, or winner not found',
   })
@@ -463,6 +468,11 @@ export class CompetitionController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized - missing or invalid Bearer token',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden - user has no team or team is not recorded as a participant winner for this competition',
   })
   @ApiResponse({
     status: 404,

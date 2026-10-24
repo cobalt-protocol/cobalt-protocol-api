@@ -1078,82 +1078,112 @@ export class CompetitionService {
       throw new BadRequestException(
         'Authenticated user has no valid wallet address',
       );
-    const team = await this.prisma.team.findFirst({
+
+    // 1. Query table team_role menggunakan user_id dari middleware header authentication
+    const userTeamRoles = await this.prisma.teamRole.findMany({
       where: {
+        user_id: user.id,
+        deleted_at: null,
+      },
+      select: { team_id: true },
+    });
+
+    // 2. Ambil kolom team_id
+    const teamIds = [
+      ...new Set(
+        userTeamRoles
+          .map((tr) => tr.team_id)
+          .filter((tid): tid is string => Boolean(tid)),
+      ),
+    ];
+
+    if (teamIds.length === 0) {
+      throw new ForbiddenException(
+        'Forbidden - user has no team in team_role',
+      );
+    }
+
+    // 3. Query ke table participant_winner menggunakan kolom team_id
+    let bigWinnerId: bigint | null = null;
+    if (winnerIdParam) {
+      try {
+        bigWinnerId = BigInt(winnerIdParam);
+      } catch {
+        bigWinnerId = null;
+      }
+    }
+
+    const participantWinners = await this.prisma.participantWinner.findMany({
+      where: {
+        team_id: { in: teamIds },
         competition_id: competition.id,
         deleted_at: null,
-        OR: [
-          { user_id: user.id },
-          { team_roles: { some: { user_id: user.id } } },
-        ],
+        ...(winnerIdParam
+          ? {
+              OR: [
+                { id: winnerIdParam },
+                ...(bigWinnerId !== null ? [{ prize_winner_id: bigWinnerId }] : []),
+                { prize_winner: { id: winnerIdParam } },
+              ],
+            }
+          : {}),
       },
-      orderBy: { created_at: 'asc' },
+      include: {
+        prize_winner: true,
+        team: true,
+      },
+      orderBy: {
+        created_at: 'asc',
+      },
     });
-    if (!team)
-      throw new NotFoundException(
-        'You have no team for this competition — join or create a team first',
+
+    // 4. Kalau hasil querynya kosong kembalikan 403
+    if (!participantWinners || participantWinners.length === 0) {
+      throw new ForbiddenException(
+        'Forbidden - user team is not recorded as a participant winner for this competition',
       );
+    }
+
+    const selectedParticipantWinner = participantWinners[0];
+    const team =
+      selectedParticipantWinner.team ??
+      (await this.prisma.team.findFirst({
+        where: { id: selectedParticipantWinner.team_id! },
+      }));
+    if (!team) {
+      throw new NotFoundException('Team not found for participant winner');
+    }
+
     let onchainWinnerId: bigint | null = null;
-    let certificateCidRaw = '';
-    if (winnerIdParam) {
-      let big: bigint | null = null;
-      try {
-        big = BigInt(winnerIdParam);
-      } catch {
-        big = null;
-      }
-      const prizeWinner: any = await this.prisma.prizeWinner.findFirst({
+    if (
+      selectedParticipantWinner.prize_winner_id !== null &&
+      selectedParticipantWinner.prize_winner_id !== undefined
+    ) {
+      onchainWinnerId = BigInt(selectedParticipantWinner.prize_winner_id);
+    } else if (
+      selectedParticipantWinner.prize_winner?.winner_id !== undefined &&
+      selectedParticipantWinner.prize_winner?.winner_id !== null
+    ) {
+      onchainWinnerId = BigInt(selectedParticipantWinner.prize_winner.winner_id);
+    } else if (bigWinnerId !== null) {
+      onchainWinnerId = bigWinnerId;
+    }
+
+    if (!onchainWinnerId || onchainWinnerId === 0n) {
+      throw new BadRequestException('Invalid winnerId (0)');
+    }
+
+    const prizeWinnerRecord =
+      selectedParticipantWinner.prize_winner ??
+      (await this.prisma.prizeWinner.findFirst({
         where: {
-          OR: [
-            { id: winnerIdParam },
-            ...(big !== null ? [{ winner_id: big } as any] : []),
-          ],
           competition_id: competition.id,
+          winner_id: onchainWinnerId,
           deleted_at: null,
         },
-        include: { winner: true } as any,
-      });
-      if (!prizeWinner)
-        throw new NotFoundException('Winner not found for this competition');
-      onchainWinnerId = BigInt(prizeWinner.winner_id);
-      certificateCidRaw = prizeWinner.certificate_cid ?? '';
-      if (
-        (prizeWinner as any).winner &&
-        (prizeWinner as any).winner.user_id !== user.id
-      )
-        throw new BadRequestException(
-          'You are not the winner for the specified winner_id',
-        );
-    } else {
-      const winnerLink: any = await this.prisma.winner.findFirst({
-        where: { user_id: user.id, deleted_at: null },
-        include: { prize_winner: true } as any,
-      });
-      if (
-        winnerLink &&
-        (winnerLink as any).prize_winner &&
-        (winnerLink as any).prize_winner.competition_id === competition.id
-      ) {
-        const pw = (winnerLink as any).prize_winner;
-        onchainWinnerId = BigInt(pw.winner_id);
-        certificateCidRaw = pw.certificate_cid ?? '';
-      }
-      if (onchainWinnerId === null)
-        throw new NotFoundException(
-          'You are not a winner for this competition',
-        );
-    }
-    if (onchainWinnerId === 0n)
-      throw new BadRequestException('Invalid winnerId (0)');
-
-    const prizeWinnerRecord = await this.prisma.prizeWinner.findFirst({
-      where: {
-        competition_id: competition.id,
-        winner_id: onchainWinnerId,
-        deleted_at: null,
-      },
-    });
-    const titleWinner = prizeWinnerRecord?.category ?? null;
+      }));
+    const titleWinner =
+      prizeWinnerRecord?.category ?? selectedParticipantWinner.title ?? null;
 
     const submission = await this.prisma.submissionProject.findFirst({
       where: { team_id: team.id, deleted_at: null },
